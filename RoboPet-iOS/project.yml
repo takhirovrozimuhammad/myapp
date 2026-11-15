@@ -27,4 +27,8 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        NSMicrophoneUsageDescription: "RoboPet sizning ovozingizni eshitishi va AI ga yuborishi uchun mikrofon kerak."
+        NSLocalNetworkUsageDescription: "RoboPet shu Wi-Fi tarmog‘idagi Mac AI serveriga ulanishi uchun ruxsat kerak."
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
         UILaunchScreen: {}
