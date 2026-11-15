@@ -1,0 +1,55 @@
+name: Build RoboPet iPhone IPA
+on:
+  push:
+    branches:
+      - robopet-ios-ipa
+    paths:
+      - "RoboPet-iOS/**"
+      - ".github/workflows/build-robopet-ipa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build unsigned iPhone IPA (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+      - name: Generate Xcode project
+        working-directory: RoboPet-iOS
+        run: xcodegen generate --spec project.yml
+      - name: Build for real iPhone (no signing)
+        working-directory: RoboPet-iOS
+        run: |
+          xcodebuild -project RoboPet.xcodeproj \
+            -scheme RoboPet \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+      - name: Package IPA
+        working-directory: RoboPet-iOS
+        run: |
+          test -d build/Build/Products/Release-iphoneos/RoboPet.app
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/RoboPet.app Payload/
+          zip -qry RoboPet-unsigned.ipa Payload
+          ls -lh RoboPet-unsigned.ipa
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoboPet-unsigned-IPA
+          path: RoboPet-iOS/RoboPet-unsigned.ipa
+          if-no-files-found: error
