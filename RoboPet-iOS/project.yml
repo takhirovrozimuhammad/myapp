@@ -1,0 +1,30 @@
+name: RoboPet
+options:
+  bundleIdPrefix: com.ridzhan
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  RoboPet:
+    type: application
+    platform: iOS
+    sources:
+      - RoboPetApp.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ridzhan.robopet
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: "NO"
+        CODE_SIGN_STYLE: Manual
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: RoboPet
+        LSRequiresIPhoneOS: true
+        UIRequiresFullScreen: true
+        UIViewControllerBasedStatusBarAppearance: true
+        UIStatusBarHidden: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UILaunchScreen: {}
