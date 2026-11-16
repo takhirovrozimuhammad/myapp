@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0b0d11">
+  <title>RoboPet — Mac Control Center</title>
+  <style>
+    :root { --bg:#0b0d11;--panel:#15171d;--panel2:#1a1d24;--stroke:#292d36;--text:#f7f5f3;--muted:#9397a4;--orange:#ffa76e;--violet:#aa9afe;--green:#92e5b8;--red:#f39b9b;--radius:20px; }
+    *,*::before,*::after{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+    button,input,select{font:inherit}
+    button{cursor:pointer}
+    :focus-visible{outline:2px solid var(--orange);outline-offset:4px}
+    .shell{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:100vh}
+    aside{border-right:1px solid var(--stroke);padding:32px 18px 22px;background:#101217;display:flex;flex-direction:column;gap:32px}
+    .brand{display:flex;align-items:center;gap:12px;padding:3px 10px;color:white}
+    .brand-logo{width:42px;height:42px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(135deg,#ffd1a4,#ed9baa);box-shadow:0 8px 27px #ed9baa1a}
+    .brand-logo svg{width:32px;height:32px}
+    .brand strong{font-weight:750;font-size:19px;letter-spacing:-.7px;line-height:1.2;display:block}
+    .brand small{font-size:10px;letter-spacing:1.8px;color:var(--muted);font-weight:700}
+    .nav-label{margin:0 12px 14px;color:#737987;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:1.8px}
+    .nav-item{width:100%;border:1px solid transparent;background:transparent;color:#afb3bc;border-radius:12px;padding:12px 14px;text-align:left;display:flex;align-items:center;gap:12px;font-size:13px;font-weight:600}
+    .nav-item.active{color:var(--text);border-color:#393039;background:linear-gradient(90deg,#312328,#242028)}
+    .nav-icon{font-size:19px;width:23px;display:inline-block;text-align:center;font-weight:400}
+    .side-bottom{margin-top:auto;background:#191a20;border:1px solid #2b2d37;border-radius:16px;padding:17px}
+    .side-bottom .version{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .side-bottom strong{font-size:12px}.side-bottom p{font-size:11px;line-height:1.65;color:var(--muted);margin:0}
+    .small-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;box-shadow:0 0 0 4px #92e5b813;margin-right:5px}
+    main{min-width:0;padding:31px clamp(20px,3.2vw,48px) 58px;max-width:1640px;width:100%;margin:0 auto;position:relative;overflow:hidden}
+    main::before{content:"";position:absolute;width:650px;height:570px;background:radial-gradient(ellipse,#603b332a,transparent 67%);right:-170px;top:-250px;pointer-events:none}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;position:relative;margin-bottom:36px}
+    .breadcrumbs{color:#9699a5;font-size:12px}.breadcrumbs b{color:#fff;font-weight:600}.breadcrumbs span{padding:0 9px;color:#535864}
+    .top-status{display:flex;align-items:center;gap:9px;color:#cacdd4;font-size:12px;border:1px solid var(--stroke);background:#191b22;border-radius:30px;padding:9px 13px;white-space:nowrap}
+    .section-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:22px}
+    h1{font-size:clamp(29px,3vw,40px);letter-spacing:-1.7px;line-height:1.1;margin:0 0 12px;font-weight:760}
+    .subtitle{color:#a9acb6;font-size:13px;margin:0;max-width:630px;line-height:1.7}
+    .eyebrow{font-size:11px;letter-spacing:2px;color:var(--orange);font-weight:750;margin-bottom:12px;display:block}
+    .pill{display:inline-flex;align-items:center;gap:7px;background:#25232a;border:1px solid #40343c;border-radius:30px;color:#f5c5af;font-size:11px;font-weight:700;padding:8px 11px}
+    .layout{display:grid;grid-template-columns:minmax(0,1.14fr) minmax(320px,.9fr);gap:20px;align-items:start}
+    .stack{display:grid;gap:20px;min-width:0}
+    .card{background:linear-gradient(145deg,#1a1c23,#14161c);border:1px solid #2c2e37;border-radius:var(--radius);padding:23px;box-shadow:0 8px 38px #00000010;min-width:0}
+    .card-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:17px}
+    .card h2{font-size:16px;margin:0;font-weight:720;letter-spacing:-.32px}
+    .card-caption{font-size:11px;color:#9397a4;margin:4px 0 0}
+    .tag{border-radius:30px;padding:5px 9px;border:1px solid #374139;background:#24352a;color:#a5e5bb;font-size:10px;font-weight:750}
+    .tag.warn{color:#f6cfab;background:#392b20;border-color:#554034}
+    .tag.off{background:#2d2630;border-color:#4d3440;color:#e9a2aa}
+    .pet-hero{padding:25px;overflow:hidden;position:relative;min-height:370px;background:radial-gradient(ellipse at 49% 18%,#30201f 0%,#191920 47%,#15171d 78%);display:flex;flex-direction:column}
+    .pet-top{display:flex;justify-content:space-between;align-items:center;z-index:1}
+    .pet-top .subtitle-small{font-size:12px;color:#9d9fa9}
+    .pet-top h2{font-size:16px;margin-top:5px}
+    .status-dot{width:8px;height:8px;background:#7f8593;border-radius:50%;display:inline-block;margin-right:4px}
+    .pet-stage{flex:1;display:flex;align-items:center;justify-content:center;padding:22px 0;min-height:220px}
+    .phone-shell{width:min(390px,96%);aspect-ratio:2.05/1;border-radius:27px;padding:7px;background:linear-gradient(145deg,#6f6870,#1c1d22 17%,#77757d 53%,#23252a 85%);box-shadow:0 30px 50px #0008,inset 0 1px 1px #ffffff70;position:relative;transform:rotate(-1.25deg);transition:transform .5s cubic-bezier(.2,.8,.3,1)}
+    .phone-shell:hover{transform:rotate(0deg) translateY(-3px)}
+    .phone-shell::before{content:"";position:absolute;left:0;top:39%;width:6px;height:31px;border-radius:0 4px 4px 0;background:#2d2d32}
+    .phone-screen{height:100%;width:100%;border-radius:21px;display:flex;align-items:center;justify-content:center;position:relative;background:#ffeadb;overflow:hidden;transition:background .35s}
+    .phone-screen::before{content:"";position:absolute;width:11px;height:65px;left:3px;top:calc(50% - 32px);border-radius:0 9px 9px 0;background:#15151a}
+    .cat-svg{width:80%;height:75%;overflow:visible}
+    .cat-eye{fill:#533126;transform-box:fill-box;transform-origin:center;animation:blink 5s infinite}
+    .cat-shine{fill:#fff;transform-box:fill-box;transform-origin:center;animation:blink 5s infinite}
+    .cat-nose{fill:#e79a98}.cat-mouth{stroke:#50312c;stroke-width:4.4;stroke-linecap:round;fill:none}
+    @keyframes blink{0%,41%,44%,100%{transform:scaleY(1)}42.5%{transform:scaleY(.065)}}
+    .pet-footer{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+    .mini-pill{background:#25262d;border:1px solid #383940;border-radius:20px;padding:6px 10px;color:#babcc7;font-size:11px}
+    .steps{display:grid;gap:0}
+    .step{display:grid;grid-template-columns:33px minmax(0,1fr);gap:12px;position:relative;padding:11px 0}
+    .step:not(:last-child)::after{content:"";position:absolute;left:15px;top:47px;height:calc(100% - 35px);width:1px;background:#3a3b43}
+    .step-num{height:32px;width:32px;border-radius:11px;background:#30282a;color:#ffc3a6;border:1px solid #5d3c38;display:grid;place-items:center;font-size:13px;font-weight:750}
+    .step strong{display:block;font-size:13px;margin-top:1px}.step p{color:#a1a5b0;font-size:11px;line-height:1.6;margin:4px 0 0}
+    .step code{background:#2c2b34;border-radius:4px;padding:2px 4px;color:#fbd6c0}
+    .input-label{display:block;color:#a6a9b3;font-size:11px;font-weight:650;margin:14px 0 8px}
+    .field{display:flex;align-items:center;gap:7px;background:#101217;border:1px solid #373940;border-radius:12px;padding:7px 7px 7px 13px;min-width:0}
+    .field-value{color:#f5e8e2;font-size:14px;letter-spacing:.2px;flex:1;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-weight:610}
+    .field .code-value{font-size:18px;letter-spacing:1.5px;font-weight:700;color:#ffc09e}
+    .copy-btn{background:#2d303a;color:#e4e4ed;border:1px solid #464855;border-radius:8px;padding:8px 11px;font-size:11px;font-weight:720;white-space:nowrap;transition:background .18s}
+    .copy-btn:hover{background:#444652}
+    .connect-line{display:flex;align-items:center;justify-content:space-between;gap:7px;background:#25272d;border-radius:12px;padding:12px;margin-top:19px}
+    .connection-indicator{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:700}
+    .connection-indicator .pulse{height:9px;width:9px;background:#aeb1b8;border-radius:50%}
+    .connection-indicator.online .pulse{background:var(--green);box-shadow:0 0 0 5px #92e5b811}
+    .connection-indicator.online{color:#b0e8c7}
+    .last-seen{font-size:10px;color:var(--muted)}
+    .action-link{border:0;background:none;color:#edb49a;font-size:11px;font-weight:650;padding:0;text-decoration:underline;text-underline-offset:3px}
+    .card-divider{height:1px;background:#30323a;margin:21px 0}
+    .model-row{display:grid;grid-template-columns:1fr auto;gap:9px}
+    select,.text-input{width:100%;background:#101216;border:1px solid #393c46;color:#f2f1ef;border-radius:10px;padding:11px 12px;outline:none;font-size:13px;min-width:0}
+    .text-input:focus,select:focus{border-color:#ad7963}
+    .primary-btn{background:#ffd0aa;color:#31251f;border-radius:10px;border:1px solid #ffe0c7;font-weight:750;padding:10px 15px;white-space:nowrap;transition:transform .15s,background .15s}
+    .primary-btn:hover{background:#ffe0c7;transform:translateY(-1px)}
+    .primary-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    .secondary-btn{border:1px solid #474951;color:#e9e7ed;background:#292a32;border-radius:10px;padding:10px 12px;font-weight:650;font-size:12px}
+    .helper{font-size:11px;color:#a8abb7;line-height:1.65;margin:11px 0 0}
+    .helper a{color:#e4b7ff}
+    .answer{min-height:40px;color:#e4e0dc;font-size:12px;line-height:1.65;white-space:pre-wrap;padding:11px 13px;border:1px solid #33363f;border-radius:11px;background:#121318;margin-top:12px}
+    .section-mini{font-size:11px;color:#8b8f9c;text-transform:uppercase;letter-spacing:1px;font-weight:750}
+    .mini-statrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+    .mini-stat{padding:14px 12px;border-radius:13px;background:#13151b;border:1px solid #2a2c34}
+    .mini-stat span{color:#8e93a0;font-size:10px;display:block;margin-top:2px}
+    .mini-stat strong{font-size:17px;letter-spacing:-.4px}
+    .event-line{display:flex;gap:10px;align-items:flex-start;padding:11px 0;border-bottom:1px solid #282a32}
+    .event-line:last-child{border:0}
+    .event-line time{color:#7b7f8b;font-size:10px;min-width:47px}.event-line p{color:#c5c7d0;font-size:11px;margin:0}
+    .toast{position:fixed;bottom:26px;left:50%;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#f8e5d7;color:#29212a;border-radius:11px;padding:12px 18px;font-weight:700;box-shadow:0 13px 35px #0006;transition:all .2s;z-index:6}
+    .toast.show{transform:translate(-50%,0);opacity:1}
+    .install{border-radius:12px;background:#2b2524;border:1px solid #4e3832;padding:12px;margin-top:13px}
+    .install code{color:#ffd7b7;font-size:12px;overflow-wrap:anywhere}
+    .install p{font-size:11px;color:#d3ada1;margin:5px 0 0}
+    .footer-note{text-align:center;font-size:11px;color:#727785;padding:27px 0 0}
+    .font-medium{font-weight:700}
+    @media(max-width:1100px){.shell{grid-template-columns:72px minmax(0,1fr)}aside{padding:22px 10px}.brand{padding:0;justify-content:center}.brand-word,.nav-label,.nav-text,.side-bottom{display:none}.nav-item{justify-content:center;padding:13px}.layout{grid-template-columns:1fr 1fr}}
+    @media(max-width:790px){.shell{grid-template-columns:1fr}aside{display:none}main{padding:24px 16px 42px}.layout{grid-template-columns:1fr}.topbar{margin-bottom:28px}.pet-hero{min-height:320px}.section-head{align-items:flex-start}.pill{display:none}}
+    @media(max-width:400px){.field-value{font-size:12px}.mini-statrow{grid-template-columns:1fr 1fr}.card{padding:17px}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand">
+      <span class="brand-logo" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M8 10L13 3l6 9M32 10L27 3l-6 9" fill="none" stroke="#57312c" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/><rect x="5" y="8" width="30" height="26" rx="12" fill="#5a342f"/><rect x="11" y="14" width="6" height="10" rx="3" fill="#ffe8c9"/><rect x="23" y="14" width="6" height="10" rx="3" fill="#ffe8c9"/><path d="M18 26l2 2 2-2m-2 2q-4 4-7 0m7 0q4 4 7 0" fill="none" stroke="#ffe8c9" stroke-linecap="round" stroke-width="2"/></svg></span>
+      <span class="brand-word"><strong>RoboPet</strong><small>CONTROL CENTER</small></span>
+    </div>
+    <nav aria-label="Bo‘limlar">
+      <p class="nav-label">Workspace</p>
+      <button class="nav-item active" type="button" onclick="scrollToBlock('overview')"><span class="nav-icon">◫</span><span class="nav-text">Boshqaruv paneli</span></button>
+      <button class="nav-item" type="button" onclick="scrollToBlock('connection')"><span class="nav-icon">⌁</span><span class="nav-text">iPhone ulanishi</span></button>
+      <button class="nav-item" type="button" onclick="scrollToBlock('artificial')"><span class="nav-icon">✧</span><span class="nav-text">AI modeli</span></button>
+      <button class="nav-item" type="button" onclick="scrollToBlock('activity')"><span class="nav-icon">◷</span><span class="nav-text">Faoliyat</span></button>
+    </nav>
+    <div class="side-bottom">
+      <div class="version"><strong>Mac Server v4</strong><span class="small-dot"></span></div>
+      <p>Ma'lumotlar Mac'ingizda qoladi. iPhone bilan bitta Wi-Fi'da ishlaydi.</p>
+    </div>
+  </aside>
+  <main id="overview">
+    <header class="topbar">
+      <div class="breadcrumbs">Workspace<span>/</span><b>Overview</b></div>
+      <div class="top-status"><span class="small-dot"></span> Local Mac server <span style="color:#7c818b">•</span> <span id="server-clock">--:--</span></div>
+    </header>
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">YOUR LITTLE DESK COMPANION</span>
+        <h1>RoboPet boshqaruv paneli</h1>
+        <p class="subtitle">iPhone mushukchangni Mac bilan bog‘la, ulanishini kuzat va bepul lokal AI bilan ishlat.</p>
+      </div>
+      <span class="pill">✦ &nbsp; Ridzhan Labs</span>
+    </div>
+
+    <section class="layout" aria-label="RoboPet boshqaruvi">
+      <div class="stack">
+        <article class="card pet-hero" aria-label="RoboPet ekran ko‘rinishi">
+          <div class="pet-top">
+            <div><span class="subtitle-small">LIVE PREVIEW</span><h2>RoboPet Face</h2></div>
+            <span class="tag">5 themes</span>
+          </div>
+          <div class="pet-stage">
+            <div class="phone-shell">
+              <div class="phone-screen" id="phoneScreen">
+                <svg viewBox="0 0 380 180" class="cat-svg" aria-label="RoboPet mushukcha ko‘zi, burni va og‘zi">
+                  <defs><linearGradient id="eyeGrad" x1="0" y1="0" x2="0.9" y2="1"><stop stop-color="#805044"/><stop offset=".8" stop-color="#4f2b25"/></linearGradient></defs>
+                  <rect class="cat-eye" x="64" y="16" width="80" height="100" rx="30"/>
+                  <rect class="cat-eye" x="236" y="16" width="80" height="100" rx="30"/>
+                  <ellipse class="cat-shine" cx="90" cy="37" rx="13" ry="10"/>
+                  <ellipse class="cat-shine" cx="262" cy="37" rx="13" ry="10"/>
+                  <ellipse cx="122" cy="97" rx="4.5" ry="4.5" fill="#fff" opacity=".68"/>
+                  <ellipse cx="294" cy="97" rx="4.5" ry="4.5" fill="#fff" opacity=".68"/>
+                  <path class="cat-nose" d="M178 120 Q190 115 202 120 Q201 127 190 133 Q179 129 178 120Z"/>
+                  <path class="cat-mouth" d="M190 132 Q184 153 166 147 Q160 144 161 138 M190 132 Q196 153 214 147 Q220 144 219 138"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div class="pet-footer">
+            <span class="mini-pill">◉ &nbsp; Smooth eyes</span><span class="mini-pill">↗ &nbsp; Landscape</span><span class="mini-pill">♥ &nbsp; Interactive</span>
+          </div>
+        </article>
+
+        <article class="card" aria-labelledby="how-title">
+          <div class="card-top"><h2 id="how-title">Qanday ulanadi?</h2><span class="section-mini">3 qadam</span></div>
+          <div class="steps">
+            <div class="step"><div class="step-num">01</div><div><strong>Mac va iPhone bitta Wi-Fi'da</strong><p>Mac’da ushbu sayt, iPhone’da RoboPet ilovasi ochiq bo‘lsin.</p></div></div>
+            <div class="step"><div class="step-num">02</div><div><strong>iPhone ekranini 3 soniya bos</strong><p>Theme galereyasi ochiladi. <code>Mac ulanishi</code> tugmasini tanla.</p></div></div>
+            <div class="step"><div class="step-num">03</div><div><strong>IP manzil va kodni yoz</strong><p>O‘ng tomondagi manzil va kodni iPhone'ga kiritib, <code>Ulanishni tekshirish</code> tugmasini bos.</p></div></div>
+          </div>
+        </article>
+        <article class="card" id="activity">
+          <div class="card-top"><h2>Faoliyat tarixi</h2><span class="section-mini">So‘nggi hodisalar</span></div>
+          <div id="events"><div class="event-line"><time>--:--</time><p>Ma’lumot yuklanmoqda...</p></div></div>
+        </article>
+      </div>
+
+      <div class="stack">
+        <article class="card" id="connection">
+          <div class="card-top">
+            <div><h2>iPhone bilan bog‘lanish</h2><p class="card-caption">Bir martalik sozlash, keyin avtomatik tekshiruv</p></div>
+            <span class="tag warn" id="connectionTag">Kutilmoqda</span>
+          </div>
+          <label class="input-label" for="macAddress">Mac server IP manzili</label>
+          <div class="field">
+            <span class="field-value" id="macAddress">Tekshirilmoqda...</span>
+            <button class="copy-btn" id="copyAddress" type="button">Nusxa</button>
+          </div>
+          <label class="input-label" for="pairCode">Maxfiy ulanish kodi</label>
+          <div class="field">
+            <span class="field-value code-value" id="pairCode">••••••••</span>
+            <button class="copy-btn" id="copyCode" type="button">Nusxa</button>
+          </div>
+          <div class="connect-line">
+            <div class="connection-indicator" id="connected"><span class="pulse"></span><span id="connectedText">iPhone kutilmoqda</span></div>
+            <span class="last-seen" id="lastSeen">—</span>
+          </div>
+          <div class="card-divider"></div>
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+            <span class="card-caption">Kod faqat shu Mac’da ko‘rinadi.</span>
+            <button class="action-link" id="rotateCode" type="button">Yangi kod yaratish</button>
+          </div>
+        </article>
+
+        <article class="card" id="artificial">
+          <div class="card-top"><div><h2>AI Brain</h2><p class="card-caption">Internet API kalitisiz, Mac'da ishlaydi</p></div><span class="tag off" id="modelTag">Tekshirilmoqda</span></div>
+          <div class="mini-statrow">
+            <div class="mini-stat"><strong id="modelCount">—</strong><span>AI model</span></div>
+            <div class="mini-stat"><strong id="voiceStatus">—</strong><span>Whisper</span></div>
+            <div class="mini-stat"><strong id="requestCount">—</strong><span>Suhbatlar</span></div>
+          </div>
+          <label class="input-label" for="modelSelect">Mac'dagi Ollama modeli</label>
+          <div class="model-row">
+            <select id="modelSelect" aria-label="Ollama modeli"><option value="">Tekshirilmoqda...</option></select>
+            <button class="secondary-btn" id="saveModel" type="button">Saqlash</button>
+          </div>
+          <div class="install" id="installTip"><strong style="font-size:12px">AI o‘rnatish</strong><p>Ollama ilovasini ishga tushir. Terminalda:</p><code>ollama pull qwen2.5:3b</code></div>
+          <label class="input-label" for="testPrompt">AI suhbatini sinash</label>
+          <div class="model-row">
+            <input class="text-input" id="testPrompt" maxlength="2000" placeholder="Salom RoboPet, ishlaring qalay?">
+            <button class="primary-btn" id="askAI" type="button">Yuborish</button>
+          </div>
+          <div class="answer" id="answerBox" aria-live="polite">AI hali tekshirilmagan. Modelni tanlab, savol yuboring.</div>
+          <p class="helper">Mikrofon orqali suhbat uchun Mac’da <code>faster-whisper</code> ham kerak. Undan foydalanish bo‘yicha yo‘riqnoma GitHub'da mavjud.</p>
+        </article>
+
+        <article class="card">
+          <div class="card-top"><h2>Ulanish holati</h2><span class="section-mini">LOCAL NETWORK</span></div>
+          <div style="display:grid;gap:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:#a8abb4">Mac server</span><span style="color:#a6ebc3;font-weight:700">● Ishlayapti</span></div>
+            <div style="height:1px;background:#30313a"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:#a8abb4">iPhone</span><span id="deviceState" style="font-weight:700;color:#e2b59e">○ Ulanmagan</span></div>
+            <div style="height:1px;background:#30313a"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:#a8abb4">AI</span><span id="brainState" style="font-weight:700;color:#e2b59e">○ Sozlanmagan</span></div>
+          </div>
+        </article>
+      </div>
+    </section>
+    <footer class="footer-note">RoboPet Control Center • Shaxsiy Mac serveri • Faqat ishonchli Wi-Fi tarmog‘ida ishlating</footer>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let snapshot = null;
+  let toastTimer;
+  function toast(message) {
+    const el = $('toast'); el.textContent = message; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2300);
+  }
+  function scrollToBlock(id) { $(id).scrollIntoView({behavior:'smooth',block:'start'}); }
+  async function api(path, opts = {}) {
+    const response = await fetch(path, Object.assign({cache:'no-store'},opts));
+    const data = await response.json();
+    if (!response.ok) throw Error(data.error || 'Serverda xatolik');
+    return data;
+  }
+  async function post(path, obj) {
+    return api(path, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+  }
+  function setTag(el, txt, state) {
+    el.textContent = txt;
+    el.className = 'tag' + (state === 'warn' ? ' warn' : state === 'off' ? ' off' : '');
+  }
+  function renderEvents(events) {
+    const box = $('events'); box.replaceChildren();
+    if (!events || events.length === 0) {
+      const d = document.createElement('p'); d.className='helper'; d.textContent='Hozircha faoliyat qayd etilmagan.'; box.append(d); return;
+    }
+    for (const event of events.slice(0, 6)) {
+      const row = document.createElement('div'); row.className='event-line';
+      const time = document.createElement('time'); time.textContent=event.time;
+      const text = document.createElement('p'); text.textContent=event.text;
+      row.append(time,text); box.append(row);
+    }
+  }
+  function refreshModels(models, current) {
+    const el=$('modelSelect');
+    const list=models || [];
+    const items=Array.from(el.options).map(o=>o.value);
+    if (items.join('|') !== list.join('|')) {
+      el.replaceChildren();
+      if (!list.length) {
+        const o=document.createElement('option');o.value='';o.textContent='Model topilmadi';el.append(o);
+      } else for (const name of list) {
+        const o=document.createElement('option');o.value=name;o.textContent=name;el.append(o);
+      }
+    }
+    if (list.includes(current) && document.activeElement!==el) el.value=current;
+  }
+  function render(s) {
+    snapshot=s;
+    $('macAddress').textContent=s.mac_address;
+    $('pairCode').textContent=s.pair_code;
+    $('modelCount').textContent=String((s.models||[]).length);
+    $('requestCount').textContent=String(s.requests || 0);
+    $('voiceStatus').textContent=s.whisper_installed?'Tayyor':'Kerak';
+    const connected=!!s.iphone_connected;
+    $('connected').classList.toggle('online',connected);
+    $('connectedText').textContent=connected?'iPhone ulangan':'iPhone kutilmoqda';
+    $('lastSeen').textContent=s.last_seen_seconds===null?'—':s.last_seen_seconds+' s oldin';
+    $('deviceState').textContent=connected?'● Ulangan':'○ Ulanmagan';
+    $('deviceState').style.color=connected?'#a6ebc3':'#e2b59e';
+    setTag($('connectionTag'),connected?'Ulangan':'Kutilmoqda',connected?'ok':'warn');
+    setTag($('modelTag'),s.ai_ready?'AI tayyor':'AI kerak',s.ai_ready?'ok':'off');
+    $('brainState').textContent=s.ai_ready?'● Tayyor':'○ Model kerak';
+    $('brainState').style.color=s.ai_ready?'#a6ebc3':'#e2b59e';
+    $('installTip').hidden=s.ai_ready;
+    refreshModels(s.models,s.model);
+    renderEvents(s.events);
+  }
+  async function poll() {
+    try { render(await api('/api/status')); }
+    catch (err) { $('connectedText').textContent='Server bilan aloqa uzildi'; setTag($('connectionTag'),'Offline','off'); }
+  }
+  async function copy(value) {
+    if (!value) {toast('Hali ma’lumot yo‘q');return;}
+    try {await navigator.clipboard.writeText(value);toast('Nusxa olindi');}
+    catch {toast('Nusxa olish bloklangan — matnni qo‘lda belgilang');}
+  }
+  $('copyAddress').addEventListener('click',()=>copy(snapshot&&snapshot.mac_address));
+  $('copyCode').addEventListener('click',()=>copy(snapshot&&snapshot.pair_code));
+  $('rotateCode').addEventListener('click',async()=>{
+    if(!confirm('Yangi kod yaratsangiz, iPhone uchun oldingi kod ishlamaydi. Davom etilsinmi?'))return;
+    try {await post('/api/rotate',{});toast('Yangi ulanish kodi tayyor');await poll();}
+    catch(e){toast(e.message);}
+  });
+  $('saveModel').addEventListener('click',async()=>{
+    const value=$('modelSelect').value;
+    if(!value){toast('Avval modelni o‘rnating');return;}
+    try {await post('/api/model',{model:value});toast('AI modeli saqlandi');await poll();}
+    catch(e){toast(e.message);}
+  });
+  async function askAI(){
+    const prompt=$('testPrompt').value.trim(); if(!prompt){toast('Savol yozing');return;}
+    const button=$('askAI');button.disabled=true;button.textContent='Yuborilmoqda...';
+    $('answerBox').textContent='RoboPet javob o‘ylayapti...';
+    try { const x=await post('/api/chat',{prompt}); $('answerBox').textContent=x.answer; }
+    catch(e){$('answerBox').textContent=e.message;}
+    finally{button.disabled=false;button.textContent='Yuborish';}
+  }
+  $('askAI').addEventListener('click',askAI);
+  $('testPrompt').addEventListener('keydown',event=>{if(event.key==='Enter')askAI();});
+  function clock() { $('server-clock').textContent=new Date().toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'}); }
+  clock(); poll(); setInterval(clock,12000); setInterval(poll,3500);
+</script>
+</body>
+</html>
