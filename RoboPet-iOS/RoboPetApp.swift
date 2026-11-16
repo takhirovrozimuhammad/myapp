@@ -264,36 +264,86 @@ struct RoboPetFace: View {
     @State private var selectedTheme = 0
     @State private var showMacSettings = false
     @State private var pairStatus = "Mac bilan ulanish tekshirilmagan."
+    @StateObject private var faceTracker = RoboPetFaceTracker()
+    @StateObject private var weather = RoboPetWeather()
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("RoboPet.cameraEnabled") private var cameraEnabled = true
+    @AppStorage("RoboPet.customBG") private var customBG = "#FCE8E0"
+    @AppStorage("RoboPet.customEye") private var customEye = "#57362F"
+    @AppStorage("RoboPet.customNose") private var customNose = "#E897A6"
+    @AppStorage("RoboPet.customMouth") private var customMouth = "#57362F"
+    @State private var showCustomTheme = false
+    @State private var editorBG: Color = .white
+    @State private var editorEye: Color = .brown
+    @State private var editorNose: Color = .pink
+    @State private var editorMouth: Color = .brown
+    @State private var sleeping = false
+    @State private var infoPanel: String = ""
 
-    private var currentIndex: Int { min(max(paletteIndex, 0), CatPalette.all.count - 1) }
+    private var themes: [CatPalette] {
+        let custom = CatPalette(
+            background: Color(robopetHex: customBG),
+            eye: Color(robopetHex: customEye),
+            eyeHighlight: Color(robopetHex: customEye),
+            nose: Color(robopetHex: customNose),
+            mouth: Color(robopetHex: customMouth),
+            sparkle: .white
+        )
+        return CatPalette.all + [custom]
+    }
+    private var currentIndex: Int { min(max(paletteIndex, 0), themes.count - 1) }
 
     var body: some View {
         ZStack {
-            faceCanvas(index: currentIndex)
-                .contentShape(Rectangle())
-                .gesture(
-                    ExclusiveGesture(
-                        LongPressGesture(minimumDuration: 3.0, maximumDistance: 36),
-                        TapGesture()
-                    ).onEnded { gesture in
-                        switch gesture {
-                        case .first:
-                            selectedTheme = currentIndex
-                            withAnimation(.spring(response: 0.43, dampingFraction: 0.85)) {
-                                themeGallery = true
-                            }
-                        case .second:
-                            voice.toggle(server: macServer, code: pairCode)
+            if sleeping {
+                sleepClock
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.35)) { sleeping = false }
+                        if cameraEnabled { faceTracker.start() }
+                    }
+            } else {
+                GeometryReader { geo in
+                    HStack(spacing: 0) {
+                        faceCanvas(index: currentIndex)
+                            .frame(width: infoPanel.isEmpty ? geo.size.width : geo.size.width * 0.5,
+                                   height: geo.size.height)
+                            .contentShape(Rectangle())
+                            .gesture(
+                                ExclusiveGesture(
+                                    LongPressGesture(minimumDuration: 3.0, maximumDistance: 36),
+                                    TapGesture()
+                                ).onEnded { gesture in
+                                    switch gesture {
+                                    case .first:
+                                        selectedTheme = currentIndex
+                                        withAnimation(.spring(response: 0.43, dampingFraction: 0.85)) {
+                                            themeGallery = true
+                                        }
+                                    case .second:
+                                        voice.toggle(server: macServer, code: pairCode)
+                                    }
+                                }
+                            )
+                        if !infoPanel.isEmpty {
+                            infoCard
+                                .frame(width: geo.size.width * 0.5, height: geo.size.height)
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
                     }
-                )
+                }
+            }
 
-            if themeGallery {
+            if !sleeping && themeGallery {
                 themeGalleryView
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
 
-            if !themeGallery, let message = voice.errorText {
+            if !sleeping && voice.pendingMusic && !themeGallery {
+                musicChoice
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+
+            if !sleeping && !themeGallery && !voice.pendingMusic, let message = voice.errorText {
                 VStack {
                     Spacer()
                     Text(message)
@@ -303,19 +353,54 @@ struct RoboPetFace: View {
                         .padding(.vertical, 8)
                         .background(.black.opacity(0.78), in: Capsule())
                         .onTapGesture { voice.errorText = nil }
-                        .padding(.bottom, 14)
+                        .padding(.bottom, 10)
                 }
                 .allowsHitTesting(true)
             }
         }
-        .onAppear { verifyMac() }
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+            if cameraEnabled { faceTracker.start() }
+            verifyMac()
+        }
+        .onDisappear {
+            faceTracker.stop()
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                UIApplication.shared.isIdleTimerDisabled = true
+                if cameraEnabled && !sleeping { faceTracker.start() }
+            } else {
+                faceTracker.stop()
+                UIApplication.shared.isIdleTimerDisabled = false
+            }
+        }
+        .onChange(of: sleeping) { value in
+            if value { faceTracker.stop() }
+            else if cameraEnabled { faceTracker.start() }
+        }
+        .onChange(of: cameraEnabled) { enabled in
+            if enabled && !sleeping { faceTracker.start() }
+            else { faceTracker.stop() }
+        }
+        .onChange(of: voice.intent) { value in
+            if value == "time" || value == "weather" {
+                withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) { infoPanel = value }
+                if value == "weather" { weather.refresh() }
+            } else if value == "music" {
+                infoPanel = ""
+            } else if value == "none" || value == "chat" {
+                withAnimation { infoPanel = "" }
+            }
+        }
         .onReceive(Timer.publish(every: 12, on: .main, in: .common).autoconnect()) { _ in
             if !showMacSettings { verifyMac(silent: true) }
         }
         .onChange(of: showMacSettings) { open in
             if !open { verifyMac() }
         }
-        .background(CatPalette.all[currentIndex].background.ignoresSafeArea())
+        .background(themes[currentIndex].background.ignoresSafeArea())
         .ignoresSafeArea()
         .preferredColorScheme(.light)
         .sheet(isPresented: $showMacSettings) {
@@ -331,24 +416,60 @@ struct RoboPetFace: View {
                     }
                     Section("Ulanish") {
                         Button("Ulanishni tekshirish") { verifyMac() }
-                            .font(.system(size: 15, weight: .semibold))
-                        Text(pairStatus)
-                            .font(.footnote)
-                            .foregroundStyle(pairStatus.contains("Ulandi") ? .green : .secondary)
+                        Text(pairStatus).font(.footnote)
                     }
-                    Section {
-                        Text("Mac va iPhone bitta Wi-Fi tarmog‘ida bo‘lsin. Mac terminalida start_mac.command ishga tushiring. Unda ko‘rsatilgan IP va kodni kiriting.")
+                    Section("Reaksiyalar") {
+                        Toggle("Kamera orqali menga qarasin", isOn: $cameraEnabled)
+                        Text(faceTracker.permission)
                             .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Text("Kamera tasvirlari telefonning o‘zida tahlil qilinadi va saqlanmaydi.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                    Section {
-                        Text("Mushukcha yuzida bir marta bosing: yozish boshlanadi. Qayta bosing: savol AI ga yuboriladi. 3 soniya bosish: theme galereyasi.")
+                    Section("Boshqarish") {
+                        Text("Bir marta bosing: mikrofonni boshlash yoki yuborish. Uch soniya bosish: theme tanlash, Sleep Mode va sozlamalar.")
                             .font(.footnote)
                     }
                 }
-                .navigationTitle("Mac ulanishi")
+                .navigationTitle("RoboPet sozlamalari")
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Tayyor") { showMacSettings = false }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showCustomTheme) {
+            NavigationStack {
+                Form {
+                    Section("O‘z theme’ingni yarat") {
+                        ColorPicker("Fon", selection: $editorBG, supportsOpacity: false)
+                        ColorPicker("Ko‘zlar", selection: $editorEye, supportsOpacity: false)
+                        ColorPicker("Burun", selection: $editorNose, supportsOpacity: false)
+                        ColorPicker("Og‘iz", selection: $editorMouth, supportsOpacity: false)
+                    }
+                    Section {
+                        Text("Ranglar telefonda saqlanadi. Custom theme'ni istalgan payt o‘zgartirishing mumkin.")
+                            .font(.footnote)
+                    }
+                }
+                .navigationTitle("Custom theme")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Bekor qilish") { showCustomTheme = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Saqlash") {
+                            customBG = editorBG.robopetHex
+                            customEye = editorEye.robopetHex
+                            customNose = editorNose.robopetHex
+                            customMouth = editorMouth.robopetHex
+                            paletteIndex = themes.count - 1
+                            selectedTheme = paletteIndex
+                            showCustomTheme = false
+                            withAnimation { themeGallery = false }
+                        }
                     }
                 }
             }
