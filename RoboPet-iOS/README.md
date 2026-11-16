@@ -1,46 +1,76 @@
-# RoboPet — iPhone 12 cat-face AI assistant 🐱
+# RoboPet V4 — iPhone + Mac Control Center 🐱
 
-Native SwiftUI app for iOS 16+ and landscape iPhone screens.
+## Mac web sayti
 
-## Controls
+Bu Mac'da ishlaydigan mahalliy website: **http://localhost:8765**. Sayt internetga joylashtirilmagan; Mac serveri ochiq bo‘lsa ishlaydi.
 
-- **Tap once:** start recording an audio message (microphone permission required).
-- **Tap again:** stop recording, send audio to the Mac AI server, and hear an AI answer through the iPhone speaker.
-- **Hold the screen for 3 seconds:** open the **iPhone Lock Screen–style theme gallery**.
-- **Swipe horizontally:** browse **Peach / Cream / Lavender / Mint / Midnight (black background)**.
-- **Tap Tanlash:** apply and save the selected theme.
-- **Mac ulanishi** in the gallery: enter the Mac's local IP, port and pairing code.
-
-The face remains full-screen with only the eyes, pink kitten nose, and omega mouth when idle. Eyes blink and move. When listening it reacts; the mouth animates while speaking.
-
-## Connect free Gemini AI through your Mac (Python 3 only)
-
-1. Visit https://aistudio.google.com/apikey and create a Gemini API key (requires a supported account and region). Gemini **2.5 Flash** has a limited free-tier API quota; not unlimited.
-2. Copy `.env.example` to `.env` and put the **key only inside this Mac file**:
+1. GitHub Actions'dan **RoboPet-Mac-Website** artefaktini yuklab, Mac'dagi `RoboPet-iOS` papkasiga chiqar.
+2. Terminalda `cd` bilan shu papkaga o't, keyin:
    ```bash
-   cd RoboPet-iOS
-   cp .env.example .env
-   # edit .env and set GEMINI_API_KEY=...
    bash start_mac.command
    ```
-3. In Terminal, you will see the local Mac IP:port and generated pairing code.
-4. Connect iPhone and Mac to the **same Wi-Fi network**.
-5. Open RoboPet on iPhone, press the face for 3 seconds, tap **Mac ulanishi**, enter the IP:port and pairing code, tap **Tayyor**, then **Tanlash**.
-6. Tap the face to record, and tap again to send the message. The Mac sends audio directly to Gemini to transcribe/understand it and return an answer; the iPhone says the answer using its **built-in voice**.
+3. Brauzer avtomatik **http://localhost:8765** ochadi.
+4. Mac va iPhone **bitta Wi‑Fi** tarmog'ida bo‘lsin. Mac saytida **IP manzil** va **ulanish kodi** ko‘rinadi.
+5. iPhone RoboPet ilovasida **3 soniya** bosib tur → tema galereyasi → **Mac ulanishi** → IP manzil va kodni yoz → **Ulanishni tekshirish**.
+6. Ulanish muvaffaqiyatli bo'lsa Mac saytida **iPhone ulangan** yozuvi chiqadi. Ilova har 12 soniyada aloqani yangilab turadi.
 
-**No API key is stored in the iPhone app or in GitHub.** The audio is sent over your local Wi-Fi to the Mac and from there to Google's Gemini API. Use a trusted home Wi-Fi; local HTTP is enabled for development.
+### Mac web sayti imkoniyatlari
 
-### Note about speech voice quality
-The AI understands Uzbek audio (capability depends on speech quality and model support), but the app uses Apple's `AVSpeechSynthesizer` for spoken output. The system may not have a built-in Uzbek voice. In that case the app falls back to Turkish and then English voices, which can pronounce Uzbek imperfectly. A higher-quality Uzbek TTS service is a later enhancement. Continuous hands-free wake-word listening is **not** included in this version.
+- iPhone online/offline holatini real vaqtda ko‘rsatadi;
+- Mac IP manzili va saqlanuvchi, maxfiy pairing code;
+- bir bosishda manzil/kodni nusxalash;
+- kodni yangilash (eski kod bekor bo‘ladi);
+- 5 ta RoboPet theme uchun jonli demo;
+- lokal Ollama modellar ro‘yxati va modelni tanlash;
+- Mac saytining o‘zida matn bilan AI sinovi;
+- audio bilan suhbat uchun Whisper holati va faoliyat jurnali.
 
-## GitHub IPA
+Boshqaruv sahifasi faqat Mac'ning o'zida ochiladi. iPhone faqat `/pair`, `/health`, `/voice` so‘rovlarini yuboradi.
 
-GitHub Actions on a public repository uses `macos-latest` to compile SwiftUI with Xcode and produces **RoboPet-unsigned.ipa** as an Actions artifact.
-- An unsigned IPA is **not installable directly**; it must be signed with your Apple ID using the usual iOS deployment/sideloading tools, or by Xcode with a development team.
-- We do not store Apple signing identities in the repo.
+## Bepul AI — Ollama
 
-This app is a prototype for UI and voice chat. Music, room lighting, reminders, real-time weather and other Mac tools are **not yet implemented**, and the model is not allowed to claim they were executed.
+RoboPet uchun pullik API kaliti kerak emas.
 
-## Safety and privacy
+1. Ollama'ni yuklab ol: https://ollama.com/download/mac
+2. Ollama Mac'da ishga tushsin.
+3. Mac Terminal'da:
+   ```bash
+   ollama pull qwen2.5:3b
+   ```
+4. Saytdagi AI Brain bo‘limida model paydo bo‘ladi, `Saqlash` tugmasini bos va matnli suhbatni sinab ko‘r.
 
-Never paste `GEMINI_API_KEY` into a public repository. The local pairing code should be kept private. There is currently no HTTPS on the local network; only use a network you trust.
+### iPhone mikrofoni bilan gaplashish (ixtiyoriy keyingi sozlash)
+
+Ovoz bilan ishlashi uchun Mac'da **faster-whisper** nutqni matnga aylantiradi; bu qism Ollama'dan alohida.
+
+```bash
+python3 -m pip install faster-whisper
+```
+
+Python muhiti o‘rnatilgan bo'lishi kerak; ayrim Mac Python versiyalarida alohida virtual muhit kerak bo'lishi mumkin. Whisper'ning kichik `base` modeli birinchi so‘rovda yuklanadi; **bu yuklash internet talab qiladi**. Keyin offline ishlaydi.
+
+Mac saytidagi `Whisper: Tayyor` statusi o‘rnatilganini bildiradi; transkripsiya sifati va yozish ishlashini real qurilmada tekshirish kerak.
+
+iPhone yuziga bir marta bos → mikrofon yozadi; yana bos → Mac'ga yuboradi; Ollama javob beradi, iPhone mahalliy TTS bilan javobni o‘qiydi. iOS’da o‘zbekcha ovoz mavjud bo‘lmasa, talaffuz noaniq bo‘lishi mumkin.
+
+## Theme galereyasi
+
+- **3 soniya bosish** → iOS Lock Screen'ga o‘xshash galereya
+- Chap/o‘ngga surish → Peach, Cream, Lavender, Mint, Midnight (qora)
+- **Tanlash** → saqlash
+- Oddiy bir marta bosish → yozish va yakunlash
+
+## iOS build
+
+GitHub Actions `RoboPet-unsigned-IPA` faylini yaratadi. Buni iPhone'ga bevosita o‘rnatib bo‘lmaydi — Apple ID orqali imzolash kerak (Xcode/Sideloadly/AltStore). Maxfiy Apple sertifikatlarini repo'ga joylamang.
+
+## Maxfiylik
+
+- Mac sayti faqat localhost'dan ko‘rinadi va kodni ko‘rsatadi.
+- iPhone ⇄ Mac aloqa HTTP orqali o‘tadi, shuning uchun faqat ishonchli, shaxsiy Wi‑Fi tarmog‘ida foydalaning.
+- Pairing code `.robopet_local.json` faylida saqlanadi va Git'ga joylanmaydi.
+- Mac audio yozuvni vaqtincha faylga yozib transkripsiya qiladi, so‘ng o‘chiradi.
+- Ollama AI Mac'da mahalliy ishlaydi. Audio, suhbat yoki shaxsiy ma'lumotlarni GitHub'ga yubormang.
+- Mac server ishlamaganda iPhone AI ovozli suhbat ishlamaydi, ammo yuzi/temalari ishlaydi.
+
+Hozircha musiqa, xona chiroqlari, Mac'dagi boshqa dasturlarni boshqarish amalga oshirilmagan.
