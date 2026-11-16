@@ -1,76 +1,53 @@
-# RoboPet V4 — iPhone + Mac Control Center 🐱
+# RoboPet V5 — iPhone 12 + Mac Control Center 🐱
 
-## Mac web sayti
+RoboPet is a full-screen iPhone companion with an animated kitten face, connected to a free Mac-hosted AI. Builds in GitHub Actions on a macOS runner.
 
-Bu Mac'da ishlaydigan mahalliy website: **http://localhost:8765**. Sayt internetga joylashtirilmagan; Mac serveri ochiq bo‘lsa ishlaydi.
+## iPhone V5 — yangi funksiyalar
 
-1. GitHub Actions'dan **RoboPet-Mac-Website** artefaktini yuklab, Mac'dagi `RoboPet-iOS` papkasiga chiqar.
-2. Terminalda `cd` bilan shu papkaga o't, keyin:
+- **Mikrofon xatosi tuzatildi:** audio yozish uchun yangilangan AVAudioRecorder (native sample rate, `prepareToRecord`, `record`) ishlatiladi. Real iPhone'da qayta sinash kerak.
+- **Face following:** iPhone old kamerasi + Apple Vision yordamida yuzning ekrandagi o‘rnini topib, RoboPet ko‘zlarini unga qaratadi. Kamera tasviri telefonni tark etmaydi, saqlanmaydi. Kamera ruxsati birinchi marta so‘raladi; sozlamada o‘chirish mumkin.
+- **Mimika:** tinglash, o‘ylash, xursand bo‘lish, uyqusirash va ovoz chiqarib javob berishda yuz ifodalari o‘zgaradi. Gaplashganda og‘iz animatsiya qiladi; bu hozircha haqiqiy viseme lip-sync emas.
+- **Soat so‘ralganda:** landscape ekranning yarmida mushukcha, yarmida soat va sana chiqadi. Ob-havo so‘ralganda: iPhone joylashuv ruxsati bilan Open-Meteo API orqali harorat, holat va namlikni ko‘rsatadi; internet talab qiladi.
+- **Musiqa so‘ralganda:** "Mac yoki iPhone?" deb tanlatadi. Mac tanlansa Music.app'ga play buyrug‘i boradi (Music kutubxonasi va macOS Automation ruxsati kerak). iPhone tanlansa Music ilovasi ochiladi; qo‘shiqni foydalanuvchi tanlaydi. Mac musiqa rejimida RoboPet og‘zi ritmga o‘xshash sekin harakatlanadi, ammo musiqa ohangini tahlil qilmaydi va haqiqiy ovozli xirgoyi yo‘q.
+- **Theme galereyasi:** ekranni **3 soniya bosib turish** → iPhone Lock Screen uslubida gorizontal galereya. 5 ta tayyor theme: Peach, Cream, Lavender, Mint, Midnight (qora).
+- **Custom themes:** "Yangi theme" → nomi, fon, ko‘z, burun va og‘iz ranglarini tanlash → Saqlash. Istagancha yangi theme qo‘shish, yaratganlarini tahrirlash mumkin; ma’lumotlar iPhone'da saqlanadi.
+- **Sleep Mode:** theme galereyasidagi `Sleep` → qora fon ustida katta, doimiy yangilanadigan soat. Ekranga bitta tegish bilan RoboPet uyg‘onadi.
+- **Ekran o‘chmasligi:** ilova old ekranda (foreground) ishlaganda `UIApplication.shared.isIdleTimerDisabled = true`. Bu telefonning avtomatik uxlab qolishini to‘xtatadi; tizimning qo‘lda bloklash, batareya yoki boshqa cheklovlarini bekor qilmaydi. Uzoq vaqt ochiq qoldirishda quvvat sarfi oshadi va ekran qizishi mumkin. Sleep Mode'da kamera o‘chadi.
+
+## Mac V5
+
+Mac web-sayti: **http://localhost:8765**, iPhone bilan bir Wi-Fi orqali ulanish. Mac serverda IP va pairing code ko‘rsatiladi. Oldingi v4 pairing code saqlanib qolishi uchun eski `.robopet_local.json` faylini yangi Mac server papkasiga ko‘chir (yoki yangi kod bilan iPhone'ni qayta ulang).
+
+### Ishga tushirish
+
+1. Eski `start_mac.command` oynasini `Ctrl+C` bilan to‘xtat (port 8765 band bo‘lmasin).
+2. Yangi `RoboPet-Mac-Website` ZIP'ni chiqar.
+3. Mac Terminal:
    ```bash
+   cd ~/Downloads/RoboPet-iOS
    bash start_mac.command
    ```
-3. Brauzer avtomatik **http://localhost:8765** ochadi.
-4. Mac va iPhone **bitta Wi‑Fi** tarmog'ida bo‘lsin. Mac saytida **IP manzil** va **ulanish kodi** ko‘rinadi.
-5. iPhone RoboPet ilovasida **3 soniya** bosib tur → tema galereyasi → **Mac ulanishi** → IP manzil va kodni yoz → **Ulanishni tekshirish**.
-6. Ulanish muvaffaqiyatli bo'lsa Mac saytida **iPhone ulangan** yozuvi chiqadi. Ilova har 12 soniyada aloqani yangilab turadi.
+   Papka nomi boshqa bo‘lsa, yuqoridagi `cd` yo‘lini o‘sha papkaga mosla.
+4. `http://localhost:8765` sahifasidan IP va kodni ol.
+5. iPhone RoboPet'da **3 soniya bos → Mac ulanishi → IP + kod → Ulanishni tekshirish**.
 
-### Mac web sayti imkoniyatlari
+### Bepul lokal AI
 
-- iPhone online/offline holatini real vaqtda ko‘rsatadi;
-- Mac IP manzili va saqlanuvchi, maxfiy pairing code;
-- bir bosishda manzil/kodni nusxalash;
-- kodni yangilash (eski kod bekor bo‘ladi);
-- 5 ta RoboPet theme uchun jonli demo;
-- lokal Ollama modellar ro‘yxati va modelni tanlash;
-- Mac saytining o‘zida matn bilan AI sinovi;
-- audio bilan suhbat uchun Whisper holati va faoliyat jurnali.
+- Ollama: https://ollama.com/download/mac
+- Model: `ollama pull qwen2.5:3b`
+- Text chat sinovi: Mac saytining AI Brain bo‘limida.
+- Ovozdan matn: `faster-whisper` (**alohida** kerak, `python3 -m pip install faster-whisper` yoki Python virtual environment orqali). Birinchi foydalanishda Whisper `base` modeli yuklanadi.
+- iPhone TTS: tizim `AVSpeechSynthesizer`; Uzbek voice iOS'da bo‘lmasa talaffuz mukammal emas.
+- Soat, ob-havo va musiqa buyruqlari lokal qoidalar bilan ajratiladi; **ular uchun Ollama kerak emas**, lekin ovozni matnga aylantirish uchun Whisper kerak.
 
-Boshqaruv sahifasi faqat Mac'ning o'zida ochiladi. iPhone faqat `/pair`, `/health`, `/voice` so‘rovlarini yuboradi.
+### Xavfsizlik va maxfiylik
 
-## Bepul AI — Ollama
+- Mac web paneli faqat `localhost` dan ochiladi. iPhone Mac bilan lokal HTTP orqali gaplashadi, shuning uchun faqat **ishonchli Wi-Fi** ishlat.
+- Juftlash kodi `.robopet_local.json` faylida, maxfiy kalitlarni GitHub'ga yuklama.
+- Old kamera tasvirlari uzatilmaydi yoki saqlanmaydi. Joylashuv faqat ob-havo so‘ralganda va ruxsat berilganda ishlatiladi.
+- Internet AI API kaliti shart emas.
+- Bu versiya iPhone'da real ishlash bo‘yicha avtomatik build tekshiruvlaridan tashqari sinovdan o‘tkazilmagan. iPhone'da mikrofon, kamera, musiqani real tekshirib boramiz.
 
-RoboPet uchun pullik API kaliti kerak emas.
+## iOS build / IPA
 
-1. Ollama'ni yuklab ol: https://ollama.com/download/mac
-2. Ollama Mac'da ishga tushsin.
-3. Mac Terminal'da:
-   ```bash
-   ollama pull qwen2.5:3b
-   ```
-4. Saytdagi AI Brain bo‘limida model paydo bo‘ladi, `Saqlash` tugmasini bos va matnli suhbatni sinab ko‘r.
-
-### iPhone mikrofoni bilan gaplashish (ixtiyoriy keyingi sozlash)
-
-Ovoz bilan ishlashi uchun Mac'da **faster-whisper** nutqni matnga aylantiradi; bu qism Ollama'dan alohida.
-
-```bash
-python3 -m pip install faster-whisper
-```
-
-Python muhiti o‘rnatilgan bo'lishi kerak; ayrim Mac Python versiyalarida alohida virtual muhit kerak bo'lishi mumkin. Whisper'ning kichik `base` modeli birinchi so‘rovda yuklanadi; **bu yuklash internet talab qiladi**. Keyin offline ishlaydi.
-
-Mac saytidagi `Whisper: Tayyor` statusi o‘rnatilganini bildiradi; transkripsiya sifati va yozish ishlashini real qurilmada tekshirish kerak.
-
-iPhone yuziga bir marta bos → mikrofon yozadi; yana bos → Mac'ga yuboradi; Ollama javob beradi, iPhone mahalliy TTS bilan javobni o‘qiydi. iOS’da o‘zbekcha ovoz mavjud bo‘lmasa, talaffuz noaniq bo‘lishi mumkin.
-
-## Theme galereyasi
-
-- **3 soniya bosish** → iOS Lock Screen'ga o‘xshash galereya
-- Chap/o‘ngga surish → Peach, Cream, Lavender, Mint, Midnight (qora)
-- **Tanlash** → saqlash
-- Oddiy bir marta bosish → yozish va yakunlash
-
-## iOS build
-
-GitHub Actions `RoboPet-unsigned-IPA` faylini yaratadi. Buni iPhone'ga bevosita o‘rnatib bo‘lmaydi — Apple ID orqali imzolash kerak (Xcode/Sideloadly/AltStore). Maxfiy Apple sertifikatlarini repo'ga joylamang.
-
-## Maxfiylik
-
-- Mac sayti faqat localhost'dan ko‘rinadi va kodni ko‘rsatadi.
-- iPhone ⇄ Mac aloqa HTTP orqali o‘tadi, shuning uchun faqat ishonchli, shaxsiy Wi‑Fi tarmog‘ida foydalaning.
-- Pairing code `.robopet_local.json` faylida saqlanadi va Git'ga joylanmaydi.
-- Mac audio yozuvni vaqtincha faylga yozib transkripsiya qiladi, so‘ng o‘chiradi.
-- Ollama AI Mac'da mahalliy ishlaydi. Audio, suhbat yoki shaxsiy ma'lumotlarni GitHub'ga yubormang.
-- Mac server ishlamaganda iPhone AI ovozli suhbat ishlamaydi, ammo yuzi/temalari ishlaydi.
-
-Hozircha musiqa, xona chiroqlari, Mac'dagi boshqa dasturlarni boshqarish amalga oshirilmagan.
+GitHub Actions `RoboPet-unsigned-IPA` yaratadi. iPhone'ga o‘rnatishdan oldin Sideloadly yoki Xcode bilan Apple ID orqali **imzolash** talab qilinadi. 
