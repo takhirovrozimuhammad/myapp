@@ -186,6 +186,14 @@ final class RoboPetWeather: NSObject, ObservableObject, CLLocationManagerDelegat
     }
 }
 
+struct RoboPetSavedTheme: Codable {
+    var name: String
+    var background: String
+    var eye: String
+    var nose: String
+    var mouth: String
+}
+
 extension Color {
     init(robopetHex hex: String) {
         let trimmed = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
