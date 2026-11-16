@@ -24,6 +24,33 @@ jobs:
           if ! command -v xcodegen >/dev/null 2>&1; then
             brew install xcodegen
           fi
+      - name: Validate Mac website and pairing server
+        run: |
+          python3 -m py_compile RoboPet-iOS/mac_server.py
+          cd RoboPet-iOS
+          python3 mac_server.py > /tmp/robopet-ci-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS http://127.0.0.1:8765/health >/tmp/robopet-health.json; then break; fi
+            sleep 1
+          done
+          python3 - <<'PY'
+          import json,urllib.request
+          base="http://127.0.0.1:8765"
+          health=json.load(urllib.request.urlopen(base+"/health"))
+          status=json.load(urllib.request.urlopen(base+"/api/status"))
+          website=urllib.request.urlopen(base+"/").read().decode("utf-8")
+          assert health["online"] is True
+          assert "RoboPet boshqaruv paneli" in website
+          assert len(status["pair_code"]) >= 8
+          assert status["mac_address"].endswith(":8765")
+          request=urllib.request.Request(base+"/pair",data=json.dumps({"code":status["pair_code"]}).encode(),headers={"Content-Type":"application/json"},method="POST")
+          assert json.load(urllib.request.urlopen(request))["ok"] is True
+          after=json.load(urllib.request.urlopen(base+"/api/status"))
+          assert after["iphone_connected"] is True
+          print("Mac website, API and pairing tests passed")
+          PY
       - name: Generate Xcode project
         working-directory: RoboPet-iOS
         run: xcodegen generate --spec project.yml
@@ -52,4 +79,15 @@ jobs:
         with:
           name: RoboPet-unsigned-IPA
           path: RoboPet-iOS/RoboPet-unsigned.ipa
+          if-no-files-found: error
+      - name: Upload RoboPet Mac website
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoboPet-Mac-Website
+          path: |
+            RoboPet-iOS/mac_server.py
+            RoboPet-iOS/mac_dashboard.html
+            RoboPet-iOS/start_mac.command
+            RoboPet-iOS/README.md
+            RoboPet-iOS/.env.example
           if-no-files-found: error
