@@ -51,6 +51,18 @@ jobs:
           assert after["iphone_connected"] is True
           print("Mac website, API and pairing tests passed")
           PY
+      - name: Check Uzbek command recognition without AI model
+        working-directory: RoboPet-iOS
+        run: |
+          python3 - <<'PY'
+          from mac_server import detect_intent, mood_for_text
+          assert detect_intent("Hozir soat necha bo'ldi?") == "time"
+          assert detect_intent("Bugun ob-havo qanday?") == "weather"
+          assert detect_intent("Menga musiqa qo'y") == "music"
+          assert detect_intent("Salom, qanday yuribsiz?") == "chat"
+          assert mood_for_text("rahmat", "Sizga yordam berdim") == "happy"
+          print("Voice command intents and emotion tests passed")
+          PY
       - name: Generate Xcode project
         working-directory: RoboPet-iOS
         run: xcodegen generate --spec project.yml
