@@ -268,10 +268,9 @@ struct RoboPetFace: View {
     @StateObject private var weather = RoboPetWeather()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("RoboPet.cameraEnabled") private var cameraEnabled = true
-    @AppStorage("RoboPet.customBG") private var customBG = "#FCE8E0"
-    @AppStorage("RoboPet.customEye") private var customEye = "#57362F"
-    @AppStorage("RoboPet.customNose") private var customNose = "#E897A6"
-    @AppStorage("RoboPet.customMouth") private var customMouth = "#57362F"
+    @AppStorage("RoboPet.userThemesJSON") private var userThemesJSON = "[]"
+    @State private var editorName = ""
+    @State private var editingCustomIndex: Int? = nil
     @State private var showCustomTheme = false
     @State private var editorBG: Color = .white
     @State private var editorEye: Color = .brown
@@ -280,16 +279,24 @@ struct RoboPetFace: View {
     @State private var sleeping = false
     @State private var infoPanel: String = ""
 
+    private var savedThemes: [RoboPetSavedTheme] {
+        let data = Data(userThemesJSON.utf8)
+        return (try? JSONDecoder().decode([RoboPetSavedTheme].self, from: data)) ?? []
+    }
     private var themes: [CatPalette] {
-        let custom = CatPalette(
-            background: Color(robopetHex: customBG),
-            eye: Color(robopetHex: customEye),
-            eyeHighlight: Color(robopetHex: customEye),
-            nose: Color(robopetHex: customNose),
-            mouth: Color(robopetHex: customMouth),
-            sparkle: .white
-        )
-        return CatPalette.all + [custom]
+        CatPalette.all + savedThemes.map { saved in
+            CatPalette(
+                background: Color(robopetHex: saved.background),
+                eye: Color(robopetHex: saved.eye),
+                eyeHighlight: Color(robopetHex: saved.eye),
+                nose: Color(robopetHex: saved.nose),
+                mouth: Color(robopetHex: saved.mouth),
+                sparkle: .white
+            )
+        }
+    }
+    private var themeNames: [String] {
+        CatPalette.themeNames + savedThemes.map { $0.name }
     }
     private var currentIndex: Int { min(max(paletteIndex, 0), themes.count - 1) }
 
@@ -444,6 +451,7 @@ struct RoboPetFace: View {
             NavigationStack {
                 Form {
                     Section("O‘z theme’ingni yarat") {
+                        TextField("Theme nomi", text: $editorName)
                         ColorPicker("Fon", selection: $editorBG, supportsOpacity: false)
                         ColorPicker("Ko‘zlar", selection: $editorEye, supportsOpacity: false)
                         ColorPicker("Burun", selection: $editorNose, supportsOpacity: false)
@@ -461,11 +469,26 @@ struct RoboPetFace: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Saqlash") {
-                            customBG = editorBG.robopetHex
-                            customEye = editorEye.robopetHex
-                            customNose = editorNose.robopetHex
-                            customMouth = editorMouth.robopetHex
-                            paletteIndex = themes.count - 1
+                            var updated = savedThemes
+                            let cleaned = editorName.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let item = RoboPetSavedTheme(
+                                name: cleaned.isEmpty ? "My Theme \(updated.count + 1)" : String(cleaned.prefix(24)),
+                                background: editorBG.robopetHex,
+                                eye: editorEye.robopetHex,
+                                nose: editorNose.robopetHex,
+                                mouth: editorMouth.robopetHex
+                            )
+                            if let index = editingCustomIndex, updated.indices.contains(index) {
+                                updated[index] = item
+                                paletteIndex = CatPalette.all.count + index
+                            } else {
+                                updated.append(item)
+                                paletteIndex = CatPalette.all.count + updated.count - 1
+                            }
+                            if let data = try? JSONEncoder().encode(updated),
+                               let json = String(data: data, encoding: .utf8) {
+                                userThemesJSON = json
+                            }
                             selectedTheme = paletteIndex
                             showCustomTheme = false
                             withAnimation { themeGallery = false }
@@ -620,11 +643,23 @@ struct RoboPetFace: View {
         }
     }
 
-    private func openThemeEditor() {
-        editorBG = Color(robopetHex: customBG)
-        editorEye = Color(robopetHex: customEye)
-        editorNose = Color(robopetHex: customNose)
-        editorMouth = Color(robopetHex: customMouth)
+    private func openThemeEditor(editIndex: Int? = nil) {
+        editingCustomIndex = editIndex
+        if let index = editIndex, savedThemes.indices.contains(index) {
+            let saved = savedThemes[index]
+            editorName = saved.name
+            editorBG = Color(robopetHex: saved.background)
+            editorEye = Color(robopetHex: saved.eye)
+            editorNose = Color(robopetHex: saved.nose)
+            editorMouth = Color(robopetHex: saved.mouth)
+        } else {
+            editorName = "My Theme \(savedThemes.count + 1)"
+            let current = themes[currentIndex]
+            editorBG = current.background
+            editorEye = current.eye
+            editorNose = current.nose
+            editorMouth = current.mouth
+        }
         showCustomTheme = true
     }
 
@@ -708,7 +743,7 @@ struct RoboPetFace: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 23).stroke(.white.opacity(0.25), lineWidth: 1))
                                 .shadow(color: .black.opacity(0.35), radius: 15, y: 8)
-                            Text(idx == 5 ? "Custom" : CatPalette.themeNames[idx])
+                            Text(themeNames[idx])
                                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.white)
                         }
@@ -725,6 +760,15 @@ struct RoboPetFace: View {
                         Label("Yangi theme", systemImage: "paintpalette")
                     }
                     .buttonStyle(PetCapsuleStyle(filled: false))
+
+                    if selectedTheme >= CatPalette.all.count {
+                        Button {
+                            openThemeEditor(editIndex: selectedTheme - CatPalette.all.count)
+                        } label: {
+                            Label("Tahrirlash", systemImage: "slider.horizontal.3")
+                        }
+                        .buttonStyle(PetCapsuleStyle(filled: false))
+                    }
 
                     Button {
                         withAnimation(.easeInOut(duration: 0.3)) {
