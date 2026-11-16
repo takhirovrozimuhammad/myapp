@@ -189,6 +189,7 @@ struct RoboPetFace: View {
     @State private var themeGallery = false
     @State private var selectedTheme = 0
     @State private var showMacSettings = false
+    @State private var pairStatus = "Mac bilan ulanish tekshirilmagan."
 
     private var currentIndex: Int { min(max(paletteIndex, 0), CatPalette.all.count - 1) }
 
@@ -233,6 +234,13 @@ struct RoboPetFace: View {
                 .allowsHitTesting(true)
             }
         }
+        .onAppear { verifyMac() }
+        .onReceive(Timer.publish(every: 12, on: .main, in: .common).autoconnect()) { _ in
+            if !showMacSettings { verifyMac(silent: true) }
+        }
+        .onChange(of: showMacSettings) { open in
+            if !open { verifyMac() }
+        }
         .background(CatPalette.all[currentIndex].background.ignoresSafeArea())
         .ignoresSafeArea()
         .preferredColorScheme(.light)
@@ -246,6 +254,13 @@ struct RoboPetFace: View {
                         SecureField("Pairing code", text: $pairCode)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
+                    }
+                    Section("Ulanish") {
+                        Button("Ulanishni tekshirish") { verifyMac() }
+                            .font(.system(size: 15, weight: .semibold))
+                        Text(pairStatus)
+                            .font(.footnote)
+                            .foregroundStyle(pairStatus.contains("Ulandi") ? .green : .secondary)
                     }
                     Section {
                         Text("Mac va iPhone bitta Wi-Fi tarmog‘ida bo‘lsin. Mac terminalida start_mac.command ishga tushiring. Unda ko‘rsatilgan IP va kodni kiriting.")
@@ -261,6 +276,41 @@ struct RoboPetFace: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Tayyor") { showMacSettings = false }
                     }
+                }
+            }
+        }
+    }
+
+    private func verifyMac(silent: Bool = false) {
+        let address = macServer.trimmingCharacters(in: .whitespacesAndNewlines)
+        let code = pairCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !address.isEmpty, !code.isEmpty else {
+            if !silent { pairStatus = "Mac saytida ko‘rsatilgan IP va kodni kiriting." }
+            return
+        }
+        let base = address.hasPrefix("http") ? address : "http://" + address
+        guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/pair") else {
+            if !silent { pairStatus = "IP manzil noto‘g‘ri." }
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 6
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "code": code, "device": "RoboPet iPhone"
+        ])
+        Task {
+            do {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+                    pairStatus = "Ulandi! Mac boshqaruv saytida ham ko‘rinadi."
+                } else {
+                    pairStatus = "Ulanmadi. Saytdagi kodni qayta tekshiring."
+                }
+            } catch {
+                if !silent {
+                    pairStatus = "Mac server topilmadi. Bir xil Wi-Fi va IP manzilini tekshiring."
                 }
             }
         }
