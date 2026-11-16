@@ -63,6 +63,12 @@ enum VoicePhase: Equatable { case idle, recording, thinking, speaking }
 final class RoboPetVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     @Published var phase: VoicePhase = .idle
     @Published var errorText: String?
+    @Published var intent: String = ""
+    @Published var emotion: String = "neutral"
+    @Published var pendingMusic = false
+    @Published var humming = false
+    @Published var transcript = ""
+    @Published var syllablePulse: Double = 0
     private var recorder: AVAudioRecorder?
     private let synthesizer = AVSpeechSynthesizer()
     private let audioFile = FileManager.default.temporaryDirectory.appendingPathComponent("robopet-voice.m4a")
@@ -97,15 +103,22 @@ final class RoboPetVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
             try session.setActive(true)
             try? FileManager.default.removeItem(at: audioFile)
-            recorder = try AVAudioRecorder(url: audioFile, settings: [
+            // Fix V4: use the device's supported input rate, prepare the file,
+            // and record() rather than record(forDuration:), which failed on some phones.
+            try session.setPreferredSampleRate(44100)
+            let deviceRate = session.sampleRate >= 8000 ? session.sampleRate : 44100
+            let newRecorder = try AVAudioRecorder(url: audioFile, settings: [
                 AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                AVSampleRateKey: 16000,
+                AVSampleRateKey: deviceRate,
                 AVNumberOfChannelsKey: 1,
-                AVEncoderBitRateKey: 64000
+                AVEncoderBitRateKey: 64000,
+                AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
             ])
-            guard recorder?.record(forDuration: 30) == true else {
-                throw NSError(domain: "RoboPet", code: 1, userInfo: [NSLocalizedDescriptionKey: "Mikrofonni boshlash imkonsiz."])
+            newRecorder.isMeteringEnabled = true
+            guard newRecorder.prepareToRecord() && newRecorder.record() else {
+                throw NSError(domain: "RoboPet", code: 1, userInfo: [NSLocalizedDescriptionKey: "Audio sessiya yozishni boshlamadi. Bluetooth qurilmani uzib, qayta sinang."])
             }
+            recorder = newRecorder
             errorText = nil
             phase = .recording
         } catch {
@@ -146,17 +159,70 @@ final class RoboPetVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
             request.httpBody = audio
             let (responseData, rawResponse) = try await URLSession.shared.data(for: request)
             guard let http = rawResponse as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-            struct Response: Decodable { let reply: String; let error: String? }
+            struct Response: Decodable {
+                let reply: String
+                let error: String?
+                let intent: String?
+                let emotion: String?
+                let transcript: String?
+            }
             let result = try JSONDecoder().decode(Response.self, from: responseData)
             guard (200...299).contains(http.statusCode) else {
                 throw NSError(domain:"RoboPet",code:http.statusCode,
                               userInfo:[NSLocalizedDescriptionKey:result.error ?? "Mac server xatosi"])
             }
             guard !result.reply.isEmpty else { throw NSError(domain:"RoboPet",code:3,userInfo:[NSLocalizedDescriptionKey:"AI bo‘sh javob berdi."]) }
-            speak(result.reply)
+            transcript = result.transcript ?? ""
+            intent = result.intent ?? ""
+            emotion = result.emotion ?? "neutral"
+            pendingMusic = intent == "music"
+            if pendingMusic {
+                speak("Musiqani qayerda qo‘yaman? Mac yoki iPhone?")
+            } else {
+                speak(result.reply)
+            }
         } catch {
             phase = .idle
             errorText = "Ulanish: \(error.localizedDescription)"
+        }
+    }
+
+    func chooseMusic(on target: String, server: String, code: String) {
+        pendingMusic = false
+        intent = ""
+        if target == "iphone" {
+            guard let url = URL(string: "music://") else { return }
+            UIApplication.shared.open(url) { success in
+                DispatchQueue.main.async {
+                    if !success { self.errorText = "iPhone’da Music ilovasi ochilmadi." }
+                }
+            }
+            return
+        }
+        let normalized = server.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = normalized.hasPrefix("http") ? normalized : "http://" + normalized
+        guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/music") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        request.setValue(code, forHTTPHeaderField: "X-RoboPet-Code")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["action": "play"])
+        Task {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 500
+                if code == 200 {
+                    humming = true
+                    emotion = "singing"
+                    speak("Mac’da musiqa boshlandi.")
+                } else {
+                    let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                    errorText = obj?["error"] as? String ?? "Mac’da Music ilovasi ishlamadi."
+                }
+            } catch {
+                errorText = "Musiqa: " + error.localizedDescription
+            }
         }
     }
 
@@ -171,6 +237,14 @@ final class RoboPetVoice: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
         utterance.volume = 1.0
         phase = .speaking
         synthesizer.speak(utterance)
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+                                        willSpeakRangeOfSpeechString characterRange: NSRange,
+                                        utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.syllablePulse = Double((characterRange.location % 7) + 2) / 10.0
+        }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
