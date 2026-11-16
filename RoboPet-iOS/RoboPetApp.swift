@@ -476,6 +476,158 @@ struct RoboPetFace: View {
         }
     }
 
+    private var sleepClock: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { tick in
+            GeometryReader { geo in
+                ZStack {
+                    Color(red: 0.026, green: 0.033, blue: 0.047)
+                    VStack(spacing: 4) {
+                        Text(tick.date, format: .dateTime.hour().minute())
+                            .font(.system(size: min(geo.size.height * 0.56, geo.size.width * 0.3),
+                                          weight: .ultraLight, design: .rounded))
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.7)
+                            .foregroundStyle(.white.opacity(0.94))
+                        Text(tick.date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.56))
+                    }
+                    .offset(x: sin(tick.date.timeIntervalSinceReferenceDate / 55) * 6,
+                            y: cos(tick.date.timeIntervalSinceReferenceDate / 64) * 4)
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Text("ROBO PET · SLEEP")
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                .tracking(2)
+                                .foregroundStyle(.white.opacity(0.27))
+                                .padding(25)
+                        }
+                        Spacer()
+                        Text("Uyg‘otish uchun teging")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.30))
+                            .padding(.bottom, 20)
+                    }
+                }
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private var infoCard: some View {
+        ZStack {
+            Color(red: 0.105, green: 0.11, blue: 0.14)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(infoPanel == "time" ? "SOAT" : "OB-HAVO")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .tracking(2)
+                        .foregroundStyle(.white.opacity(0.55))
+                    Spacer()
+                    Button {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) { infoPanel = "" }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 31, height: 31)
+                            .background(.white.opacity(0.12), in: Circle())
+                    }
+                }
+                Spacer(minLength: 0)
+                if infoPanel == "time" {
+                    TimelineView(.periodic(from: .now, by: 1)) { tick in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(tick.date, format: .dateTime.hour().minute())
+                                .font(.system(size: 65, weight: .light, design: .rounded))
+                                .monospacedDigit()
+                                .minimumScaleFactor(0.7)
+                                .lineLimit(1)
+                                .foregroundStyle(.white)
+                            Text(tick.date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.65))
+                        }
+                    }
+                } else {
+                    Text(weather.temperature)
+                        .font(.system(size: 68, weight: .light, design: .rounded))
+                        .foregroundStyle(.white)
+                        .minimumScaleFactor(0.7)
+                    Text(weather.condition)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.8))
+                    Text(weather.details)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.5))
+                    if weather.loading {
+                        ProgressView().tint(.white)
+                    }
+                }
+                Spacer(minLength: 0)
+                if infoPanel == "weather" {
+                    Button {
+                        weather.refresh()
+                    } label: {
+                        Label("Yangilash", systemImage: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.75))
+                    }
+                }
+            }
+            .padding(.vertical, 23)
+            .padding(.horizontal, 24)
+        }
+    }
+
+    private var musicChoice: some View {
+        ZStack {
+            Color.black.opacity(0.70).ignoresSafeArea()
+            VStack(spacing: 13) {
+                Text("♫ Musiqani qayerda qo‘yamiz?")
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                Text("Mac’da Music ilovasini boshqarish yoki iPhone’da ochish")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.70))
+                    .multilineTextAlignment(.center)
+                HStack(spacing: 13) {
+                    Button {
+                        voice.chooseMusic(on: "mac", server: macServer, code: pairCode)
+                    } label: {
+                        Label("Mac", systemImage: "laptopcomputer")
+                    }
+                    .buttonStyle(PetCapsuleStyle(filled: true))
+                    Button {
+                        voice.chooseMusic(on: "iphone", server: macServer, code: pairCode)
+                    } label: {
+                        Label("iPhone", systemImage: "iphone")
+                    }
+                    .buttonStyle(PetCapsuleStyle(filled: true))
+                }
+                Button("Bekor qilish") {
+                    voice.pendingMusic = false
+                    voice.intent = ""
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.75))
+            }
+            .padding(25)
+            .frame(maxWidth: 470)
+            .background(Color(red: 0.15, green: 0.16, blue: 0.20),
+                        in: RoundedRectangle(cornerRadius: 25, style: .continuous))
+        }
+    }
+
+    private func openThemeEditor() {
+        editorBG = Color(robopetHex: customBG)
+        editorEye = Color(robopetHex: customEye)
+        editorNose = Color(robopetHex: customNose)
+        editorMouth = Color(robopetHex: customMouth)
+        showCustomTheme = true
+    }
+
     private func verifyMac(silent: Bool = false) {
         let address = macServer.trimmingCharacters(in: .whitespacesAndNewlines)
         let code = pairCode.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -524,9 +676,14 @@ struct RoboPetFace: View {
                          t: t,
                          happy: voice.phase == .recording,
                          speaking: voice.phase == .speaking,
-                         catPalette: CatPalette.all[index])
+                         catPalette: themes[index],
+                         gazeX: faceTracker.gazeX,
+                         gazeY: faceTracker.gazeY,
+                         emotion: voice.emotion,
+                         humming: voice.humming,
+                         pulse: voice.syllablePulse)
             }
-            .background(CatPalette.all[index].background)
+            .background(themes[index].background)
         }
     }
 
@@ -544,14 +701,14 @@ struct RoboPetFace: View {
                 .padding(.top, 12)
 
                 TabView(selection: $selectedTheme) {
-                    ForEach(CatPalette.all.indices, id: \.self) { idx in
+                    ForEach(themes.indices, id: \.self) { idx in
                         VStack(spacing: 9) {
                             faceCanvas(index: idx)
-                                .frame(width: 450, height: 205)
+                                .frame(width: 430, height: 185)
                                 .clipShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 23).stroke(.white.opacity(0.25), lineWidth: 1))
                                 .shadow(color: .black.opacity(0.35), radius: 15, y: 8)
-                            Text(CatPalette.themeNames[idx])
+                            Text(idx == 5 ? "Custom" : CatPalette.themeNames[idx])
                                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.white)
                         }
@@ -559,14 +716,31 @@ struct RoboPetFace: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
-                .frame(maxWidth: .infinity, maxHeight: 265)
+                .frame(maxWidth: .infinity, maxHeight: 240)
 
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    Button {
+                        openThemeEditor()
+                    } label: {
+                        Label("Yangi theme", systemImage: "paintpalette")
+                    }
+                    .buttonStyle(PetCapsuleStyle(filled: false))
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            themeGallery = false
+                            sleeping = true
+                        }
+                    } label: {
+                        Label("Sleep", systemImage: "moon.zzz")
+                    }
+                    .buttonStyle(PetCapsuleStyle(filled: false))
+
                     Button {
                         showMacSettings = true
                     } label: {
                         Label("Mac ulanishi", systemImage: "laptopcomputer")
-                            .frame(minWidth: 126)
+                            .frame(minWidth: 87)
                     }
                     .buttonStyle(PetCapsuleStyle(filled: false))
 
@@ -587,21 +761,23 @@ struct RoboPetFace: View {
         }
     }
 
-    private func drawFace(context: inout GraphicsContext, t: Double, happy: Bool, speaking: Bool, catPalette: CatPalette) {
+    private func drawFace(context: inout GraphicsContext, t: Double, happy: Bool, speaking: Bool, catPalette: CatPalette,
+                          gazeX: CGFloat, gazeY: CGFloat, emotion: String, humming: Bool, pulse: Double) {
         let p = catPalette
         let blinkPhase = t.truncatingRemainder(dividingBy: 4.6)
         let blink: Double = blinkPhase < 0.18
             ? max(0.065, abs(blinkPhase - 0.09) / 0.09)
             : 1.0
-        let expression: Double = happy ? 0.55 : 1.0
-        let gazeX = sin(t * 0.72) * 4.5
-        let gazeY = sin(t * 0.47 + 0.6) * 3.5
-        let bounce = sin(t * 1.43) * 1.8
+        let expression: Double = (happy || emotion == "happy" || emotion == "excited") ? 0.69 :
+            (emotion == "sleepy" ? 0.38 : emotion == "thinking" ? 0.82 : 1.0)
+        let eyeShiftX = Double(gazeX) * 31 + sin(t * 0.72) * (abs(gazeX) < 0.03 ? 3.5 : 0.5)
+        let eyeShiftY = -Double(gazeY) * 18 + sin(t * 0.47 + 0.6) * (abs(gazeY) < 0.03 ? 2.5 : 0.4)
+        let bounce = sin(t * 1.43) * (humming ? 3.4 : 1.8)
 
         for left in [204.0, 516.0] {
             let eyeH = 140.0 * blink * expression
-            let x = left + gazeX
-            let y = 79.0 + bounce + (140.0 - eyeH) / 2 + gazeY
+            let x = left + eyeShiftX
+            let y = 79.0 + bounce + (140.0 - eyeH) / 2 + eyeShiftY
             let eyeRect = CGRect(x: x, y: y, width: 125, height: max(eyeH, 3))
             let r = min(46, eyeH * 0.36)
             let eyePath = Path(roundedRect: eyeRect, cornerRadius: r)
@@ -643,8 +819,9 @@ struct RoboPetFace: View {
                            control: CGPoint(x: 453, y: 247))
         context.stroke(mouth, with: .color(p.mouth), style: StrokeStyle(lineWidth: 5.5, lineCap: .round))
 
-        if speaking {
-            let mouthSize = 8.0 + abs(sin(t * 13.7)) * 18.0
+        if speaking || humming {
+            let beat = humming ? 5.0 : 13.7
+            let mouthSize = 7.0 + abs(sin(t * beat)) * (humming ? 13.0 : 19.0) * max(0.7, pulse)
             let oval = Path(ellipseIn: CGRect(
                 x: 422 - mouthSize * 0.55,
                 y: 255,
