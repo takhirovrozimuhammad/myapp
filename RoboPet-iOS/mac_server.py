@@ -11,6 +11,7 @@ import json
 import os
 import secrets
 import socket
+import subprocess
 import tempfile
 import threading
 import time
@@ -114,6 +115,44 @@ def chat_with_ollama(text):
     if not answer:
         raise RuntimeError("AI javob bermadi.")
     return answer
+
+def detect_intent(transcript):
+    """Simple, local action routing; these commands don't require a large AI model."""
+    text = transcript.lower().replace("’", "'").replace("‘", "'").replace("ʻ", "'").replace("‘", "'")
+    if any(x in text for x in ("ob-havo", "ob havo", "ob-havoni", "havo qanday", "weather", "harorat")):
+        return "weather"
+    if any(x in text for x in ("soat nech", "soatni", "vaqt nech", "time now", "what time", "hozir soat")):
+        return "time"
+    if any(x in text for x in ("musiqa", "qo'shiq", "musiqani", "music", "song", "pleylist", "playlist")):
+        return "music"
+    return "chat"
+
+def mood_for_text(transcript, answer):
+    text = (transcript + " " + answer).lower()
+    if any(x in text for x in ("xursand", "ajoyib", "rahmat", "zo'r", "tabrik", "happy", "great")):
+        return "happy"
+    if any(x in text for x in ("xafa", "yomon", "afsus", "sad", "sorry")):
+        return "gentle"
+    if any(x in text for x in ("uxla", "tinch", "sleep", "dam ol")):
+        return "sleepy"
+    if any(x in text for x in ("nega", "qanday", "why", "how")):
+        return "thinking"
+    return "neutral"
+
+def mac_music(action):
+    if action not in ("play", "pause"):
+        raise ValueError("Music action noto‘g‘ri.")
+    # Apple Music playback requires existing tracks/library and a one-time
+    # macOS Automation permission. We never download or source songs.
+    script = 'tell application "Music" to ' + action
+    try:
+        result = subprocess.run(["osascript", "-e", script],
+                                capture_output=True, text=True, timeout=12)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError("Mac'da Music ilovasini ochib ko‘ring. " + str(exc))
+    if result.returncode != 0:
+        raise RuntimeError("Music ishlamadi. Apple Music kutubxonasini va Automation ruxsatlarini tekshiring.")
+    return "Mac Music: " + ("play" if action == "play" else "pause")
 
 def transcribe_audio(data):
     global _whisper
@@ -253,14 +292,46 @@ class Handler(BaseHTTPRequestHandler):
                 if len(audio) < 100:
                     raise ValueError("Audio juda qisqa.")
                 text = transcribe_audio(audio)
-                answer = chat_with_ollama(text)
+                intent = detect_intent(text)
+                if intent == "time":
+                    answer = "Albatta, hozirgi vaqtni ekranda ko‘rsataman."
+                elif intent == "weather":
+                    answer = "Hozirgi ob-havoni joylashuvingiz bo‘yicha ko‘rsataman."
+                elif intent == "music":
+                    answer = "Musiqani Mac'da yoki iPhone'da qo‘yishni tanlang."
+                else:
+                    answer = chat_with_ollama(text)
+                emotion = mood_for_text(text, answer)
                 with LOCK:
                     _requests += 1
-                record_event("Ovozli savolga AI javob qaytardi")
-                self.send_json(200, {"reply": answer, "error": None})
+                record_event("Ovozli so‘rov: " + intent)
+                self.send_json(200, {
+                    "reply": answer,
+                    "error": None,
+                    "intent": intent,
+                    "emotion": emotion,
+                    "transcript": text
+                })
             except (RuntimeError, ValueError, OSError, urllib.error.URLError) as exc:
                 record_event("Ovozli so‘rov ishlamadi")
                 self.send_json(503, {"reply": "", "error": str(exc)})
+            return
+
+        if self.path == "/music":
+            code = self.headers.get("X-RoboPet-Code", "")
+            with LOCK:
+                allowed = secrets.compare_digest(code, SETTINGS["pair_code"])
+            if not allowed:
+                self.send_json(401, {"error": "Ulanish kodi noto‘g‘ri."})
+                return
+            try:
+                obj = json.loads(self.read_body(1024))
+                action = obj.get("action", "")
+                message = mac_music(action)
+                record_event("Mac Music: " + str(action))
+                self.send_json(200, {"ok": True, "message": message})
+            except (RuntimeError, ValueError, OSError) as exc:
+                self.send_json(503, {"error": str(exc)})
             return
 
         if not self.localhost_only():
