@@ -1,155 +1,325 @@
 #!/usr/bin/env python3
-"""RoboPet Mac local AI relay. No external Python dependencies.
+"""RoboPet Mac: LAN pairing, local website, optional free Ollama + Whisper voice.
 
-Audio (AAC/M4A) from the iPhone is sent to Gemini, which interprets
-the spoken words and produces a short Uzbek answer. Apple TTS on the
-phone then speaks the answer.
+Uses only Python 3 standard library for the website and pairing.
+Voice transcription requires optional faster-whisper, and AI needs local Ollama.
+The dashboard is restricted to 127.0.0.1 (this Mac).
 """
-import base64
-import hmac
+import importlib.util
+import ipaddress
 import json
 import os
 import secrets
 import socket
-import sys
+import tempfile
+import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
-HOST = "0.0.0.0"
+ROOT = Path(__file__).resolve().parent
+CONFIG_FILE = ROOT / ".robopet_local.json"
 PORT = int(os.environ.get("ROBO_PET_PORT", "8765"))
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-API_KEY = os.environ.get("GEMINI_API_KEY", "")
-PAIR_CODE = os.environ.get("ROBO_PET_CODE") or secrets.token_hex(5)
+OLLAMA_URL = "http://127.0.0.1:11434"
 MAX_AUDIO_BYTES = 4 * 1024 * 1024
+LOCK = threading.Lock()
+WHISPER_LOCK = threading.Lock()
+_whisper = None
+_last_seen = 0.0
+_requests = 0
+_events = []
 
 SYSTEM = (
-    "Siz RoboPet, iPhone ekranidagi juda muloyim va aqlli mushukcha-robotsiz. "
-    "Foydalanuvchi audio orqali gapiradi. Gapini tushunib, savoliga javob bering. "
-    "Asosan o‘zbek tilida, LOTIN yozuvida, tabiiy, qisqa va sodda gapiring. "
-    "Javob odatda 1-3 gapdan oshmasin. Keraksiz markdown, emoji yoki yulduzchalar ishlatmang. "
-    "Agar audio tushunarsiz bo‘lsa, qayta so‘rang. Siz real qurilmalarni boshqara olmaysiz, "
-    "bajarilmagan ishni bajardim demang."
+    "Sen RoboPet, yoqimtoy va aqlli mushukcha robotsan. "
+    "O‘zbek lotin tilida, sodda, iliq va tabiiy javob ber. "
+    "Javob 1-3 gapdan oshmasin. O‘zing bajarmagan ishni bajardim dema. "
+    "Bola va o‘smirlar uchun xavfsiz yordamchi bo‘l."
 )
 
-def gemini_reply(audio: bytes) -> str:
-    if not API_KEY:
-        raise RuntimeError("GEMINI_API_KEY kiritilmagan. Mac'da .env faylini sozlang.")
-    payload = {
-        "system_instruction": {"parts": [{"text": SYSTEM}]},
-        "contents": [
-            {"role": "user", "parts": [
-                {"text": "Audio yozuvdagi gapni tushun va ovoz bilan aytishga qulay javob yoz."},
-                {"inline_data": {
-                    "mime_type": "audio/mp4",
-                    "data": base64.b64encode(audio).decode("ascii")
-                }}
-            ]}
-        ],
-        "generationConfig": {
-            "maxOutputTokens": 250,
-            "temperature": 0.65
-        }
-    }
-    url = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent"
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "x-goog-api-key": API_KEY,
-            "Content-Type": "application/json; charset=utf-8",
-        },
-        method="POST"
-    )
+def load_settings():
     try:
-        with urllib.request.urlopen(request, timeout=55) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        try:
-            message = json.loads(exc.read().decode("utf-8")).get("error", {}).get("message", str(exc))
-        except Exception:
-            message = str(exc)
-        raise RuntimeError("Gemini API: " + str(message)) from exc
-    parts = result.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-    text = "".join(p.get("text", "") for p in parts).strip()
-    if not text:
-        raise RuntimeError("Gemini audio uchun javob bermadi; yana urinib ko‘ring.")
-    return text
+        obj = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        if isinstance(obj, dict):
+            return obj
+    except (OSError, ValueError):
+        pass
+    return {}
 
-class Handler(BaseHTTPRequestHandler):
-    def send_json(self, status, obj):
-        raw = json.dumps(obj, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(raw)
+SETTINGS = load_settings()
+if not isinstance(SETTINGS.get("pair_code"), str) or len(SETTINGS["pair_code"]) < 8:
+    SETTINGS["pair_code"] = secrets.token_urlsafe(9)
+SETTINGS.setdefault("model", "qwen2.5:3b")
 
-    def do_GET(self):
-        if self.path == "/health":
-            self.send_json(200, {
-                "online": True,
-                "ai_ready": bool(API_KEY),
-                "model": MODEL,
-            })
-        else:
-            self.send_json(404, {"reply": "", "error": "Not found"})
+def save_settings():
+    data = json.dumps(SETTINGS, indent=2, ensure_ascii=False)
+    temp = CONFIG_FILE.with_suffix(".tmp")
+    with open(temp, "w", encoding="utf-8") as file:
+        os.chmod(temp, 0o600)
+        file.write(data)
+    os.replace(temp, CONFIG_FILE)
 
-    def do_POST(self):
-        if self.path != "/voice":
-            self.send_json(404, {"reply": "", "error": "Not found"})
-            return
-        code = self.headers.get("X-RoboPet-Code", "")
-        if not hmac.compare_digest(code, PAIR_CODE):
-            self.send_json(401, {"reply": "", "error": "Mac ulanish kodi noto‘g‘ri."})
-            return
-        if self.headers.get("Content-Type", "").split(";")[0] not in ("audio/mp4", "audio/x-m4a"):
-            self.send_json(415, {"reply": "", "error": "Audio formati qo‘llanmaydi."})
-            return
-        try:
-            size = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            size = 0
-        if not 100 <= size <= MAX_AUDIO_BYTES:
-            self.send_json(413, {"reply": "", "error": "Audio hajmi noto‘g‘ri (maksimum 4 MB)."})
-            return
-        audio = self.rfile.read(size)
-        try:
-            answer = gemini_reply(audio)
-            self.send_json(200, {"reply": answer, "error": None})
-        except Exception as exc:
-            # Do not leak API keys or raw audio into console logs.
-            self.send_json(502, {"reply": "", "error": str(exc)})
+save_settings()
 
-    def log_message(self, fmt, *args):
-        # Avoid logging microphone requests or confidential pairing code.
-        if self.path == "/health":
-            super().log_message(fmt, *args)
+def record_event(message):
+    with LOCK:
+        _events.insert(0, {"text": message, "time": time.strftime("%H:%M:%S")})
+        del _events[12:]
 
-def local_ip():
+def mac_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(("1.1.1.1", 80))
+        s.connect(("1.1.1.1", 80))  # UDP connect does not send a packet
         return s.getsockname()[0]
     except OSError:
-        return "Mac_IP"
+        return "127.0.0.1"
     finally:
         s.close()
 
-def main():
-    print("\n🐱 RoboPet Mac AI server")
-    print("Mac IP:          " + local_ip() + ":" + str(PORT))
-    print("RoboPet code:    " + PAIR_CODE)
-    print("Gemini AI:       " + ("configured" if API_KEY else "API KEY MISSING (.env)"))
-    print("iPhone va Mac bir Wi-Fi tarmog‘ida bo‘lishi kerak.\n")
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
+def ollama_request(endpoint, data=None, timeout=3):
+    request = urllib.request.Request(
+        OLLAMA_URL + endpoint,
+        data=None if data is None else json.dumps(data).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="GET" if data is None else "POST"
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as resp:
+        return json.load(resp)
+
+def installed_models():
     try:
-        server.serve_forever()
+        return [x.get("name", "") for x in ollama_request("/api/tags", timeout=1.5).get("models", [])]
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return []
+
+def chat_with_ollama(text):
+    if not text.strip():
+        raise ValueError("Savol bo‘sh.")
+    with LOCK:
+        model = SETTINGS["model"]
+    available = installed_models()
+    if model not in available:
+        if not available:
+            raise RuntimeError("Ollama ishlamayapti. Mac’da Ollama'ni oching va model yuklang.")
+        raise RuntimeError("Tanlangan AI modeli topilmadi. Saytda boshqa modelni tanlang.")
+    result = ollama_request("/api/generate", {
+        "model": model,
+        "system": SYSTEM,
+        "prompt": text[:4000],
+        "stream": False,
+        "options": {"num_predict": 180, "temperature": 0.65}
+    }, timeout=110)
+    answer = result.get("response", "").strip()
+    if not answer:
+        raise RuntimeError("AI javob bermadi.")
+    return answer
+
+def transcribe_audio(data):
+    global _whisper
+    if importlib.util.find_spec("faster_whisper") is None:
+        raise RuntimeError("Ovozni matnga aylantirish uchun faster-whisper o‘rnatilmagan. Saytdagi ko‘rsatmaga qarang.")
+    with WHISPER_LOCK:
+        if _whisper is None:
+            from faster_whisper import WhisperModel
+            _whisper = WhisperModel("base", device="cpu", compute_type="int8")
+        with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as file:
+            path = file.name
+            file.write(data)
+        try:
+            segments, _ = _whisper.transcribe(path, language="uz", beam_size=3)
+            transcript = " ".join(x.text.strip() for x in segments).strip()
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+    if not transcript:
+        raise RuntimeError("Ovoz tushunilmadi. Qaytadan ayting.")
+    return transcript
+
+def is_loopback(ip):
+    try:
+        return ipaddress.ip_address(ip).is_loopback
+    except ValueError:
+        return False
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def send_bytes(self, status, data, mime):
+        self.send_response(status)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def send_json(self, status, obj):
+        self.send_bytes(status, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+
+    def read_body(self, maximum):
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            n = 0
+        if n <= 0 or n > maximum:
+            raise ValueError("So‘rov hajmi noto‘g‘ri.")
+        return self.rfile.read(n)
+
+    def localhost_only(self):
+        if not is_loopback(self.client_address[0]):
+            self.send_json(403, {"error": "Boshqaruv paneli faqat Mac'ning o‘zida ishlaydi."})
+            return False
+        return True
+
+    def do_GET(self):
+        global _last_seen
+        if self.path in ("/", "/index.html"):
+            if not self.localhost_only():
+                return
+            html = ROOT / "mac_dashboard.html"
+            try:
+                content = html.read_bytes()
+                self.send_bytes(200, content, "text/html; charset=utf-8")
+            except OSError:
+                self.send_json(500, {"error": "mac_dashboard.html topilmadi."})
+        elif self.path == "/health":
+            self.send_json(200, {"online": True, "app": "RoboPet Mac", "version": 4})
+        elif self.path == "/api/status":
+            if not self.localhost_only():
+                return
+            models = installed_models()
+            with LOCK:
+                seen = _last_seen
+                count = _requests
+                events = list(_events)
+                model = SETTINGS["model"]
+                code = SETTINGS["pair_code"]
+            self.send_json(200, {
+                "online": True,
+                "mac_address": f"{mac_ip()}:{PORT}",
+                "pair_code": code,
+                "iphone_connected": bool(seen and time.time() - seen < 30),
+                "last_seen_seconds": round(time.time() - seen) if seen else None,
+                "requests": count,
+                "models": models,
+                "model": model,
+                "ai_ready": model in models,
+                "ollama_running": bool(models),
+                "whisper_installed": importlib.util.find_spec("faster_whisper") is not None,
+                "events": events
+            })
+        else:
+            self.send_json(404, {"error": "Not found"})
+
+    def do_POST(self):
+        global _last_seen, _requests
+        if self.path == "/pair":
+            try:
+                obj = json.loads(self.read_body(1024))
+                code = obj.get("code", "")
+            except (ValueError, TypeError):
+                self.send_json(400, {"ok": False, "error": "Ulanish kodi yuborilmadi."})
+                return
+            with LOCK:
+                authorized = isinstance(code, str) and secrets.compare_digest(code, SETTINGS["pair_code"])
+                if authorized:
+                    _last_seen = time.time()
+            if authorized:
+                self.send_json(200, {"ok": True, "name": "RoboPet Mac", "message": "Ulandi"})
+                record_event("iPhone bilan ulanish tasdiqlandi")
+            else:
+                self.send_json(401, {"ok": False, "error": "Ulanish kodi noto‘g‘ri."})
+            return
+
+        if self.path == "/voice":
+            code = self.headers.get("X-RoboPet-Code", "")
+            with LOCK:
+                authorized = secrets.compare_digest(code, SETTINGS["pair_code"])
+                if authorized:
+                    _last_seen = time.time()
+            if not authorized:
+                self.send_json(401, {"reply": "", "error": "Mac ulanish kodi noto‘g‘ri."})
+                return
+            if self.headers.get("Content-Type", "").split(";")[0] not in ("audio/mp4", "audio/x-m4a"):
+                self.send_json(415, {"reply": "", "error": "Audio formati qo‘llanmaydi."})
+                return
+            try:
+                audio = self.read_body(MAX_AUDIO_BYTES)
+                if len(audio) < 100:
+                    raise ValueError("Audio juda qisqa.")
+                text = transcribe_audio(audio)
+                answer = chat_with_ollama(text)
+                with LOCK:
+                    _requests += 1
+                record_event("Ovozli savolga AI javob qaytardi")
+                self.send_json(200, {"reply": answer, "error": None})
+            except (RuntimeError, ValueError, OSError, urllib.error.URLError) as exc:
+                record_event("Ovozli so‘rov ishlamadi")
+                self.send_json(503, {"reply": "", "error": str(exc)})
+            return
+
+        if not self.localhost_only():
+            return
+        try:
+            obj = json.loads(self.read_body(8192))
+        except (ValueError, TypeError):
+            self.send_json(400, {"error": "JSON noto‘g‘ri."})
+            return
+
+        if self.path == "/api/rotate":
+            with LOCK:
+                SETTINGS["pair_code"] = secrets.token_urlsafe(9)
+                _last_seen = 0
+                save_settings()
+            record_event("Yangi ulanish kodi yaratildi")
+            self.send_json(200, {"ok": True})
+        elif self.path == "/api/model":
+            model = obj.get("model", "")
+            if not isinstance(model, str) or model not in installed_models():
+                self.send_json(400, {"error": "Model Ollama'da topilmadi."})
+                return
+            with LOCK:
+                SETTINGS["model"] = model
+                save_settings()
+            record_event("AI modeli yangilandi")
+            self.send_json(200, {"ok": True})
+        elif self.path == "/api/chat":
+            prompt = obj.get("prompt", "")
+            try:
+                if not isinstance(prompt, str) or len(prompt) > 2000:
+                    raise ValueError("Savol uzunligi 2000 belgidan oshmasin.")
+                answer = chat_with_ollama(prompt)
+                self.send_json(200, {"answer": answer})
+                record_event("Mac panelida AI sinovi bajarildi")
+            except (RuntimeError, ValueError, OSError, urllib.error.URLError) as exc:
+                self.send_json(503, {"error": str(exc)})
+        else:
+            self.send_json(404, {"error": "Not found"})
+
+    def log_message(self, fmt, *args):
+        # Never log local pairing codes or private audio payloads.
+        pass
+
+def main():
+    httpd = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    httpd.daemon_threads = True
+    print("\n🐱  RoboPet Mac Dashboard")
+    print(f"    Mac sayti:    http://localhost:{PORT}")
+    print(f"    iPhone URL:   http://{mac_ip()}:{PORT}")
+    print("    Ulanish kodi va qurilma holati saytda ko‘rinadi.")
+    print("    Ishlatish uchun Mac va iPhone bir Wi-Fi tarmog‘ida bo‘lsin.\n")
+    record_event("RoboPet Mac server ishga tushdi")
+    try:
+        httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nRoboPet server stopped.")
+        print("\nServer to‘xtadi.")
     finally:
-        server.server_close()
+        httpd.server_close()
 
 if __name__ == "__main__":
     main()
