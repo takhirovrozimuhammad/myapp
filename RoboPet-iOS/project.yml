@@ -9,6 +9,7 @@ targets:
     platform: iOS
     sources:
       - RoboPetApp.swift
+      - RoboPetFeatures.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ridzhan.robopet
@@ -27,6 +28,8 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        NSCameraUsageDescription: "Mushukcha ko‘zlari yuzingizga qarashi uchun old kamera faqat qurilmaning o‘zida yuz joylashuvini aniqlaydi. Video saqlanmaydi."
+        NSLocationWhenInUseUsageDescription: "RoboPet joylashuvingizdagi ob-havoni ko‘rsatishi uchun ruxsat kerak."
         NSMicrophoneUsageDescription: "RoboPet sizning ovozingizni eshitishi va AI ga yuborishi uchun mikrofon kerak."
         NSLocalNetworkUsageDescription: "RoboPet shu Wi-Fi tarmog‘idagi Mac AI serveriga ulanishi uchun ruxsat kerak."
         NSAppTransportSecurity:
